@@ -26,6 +26,9 @@ id in its commit (`Fixes B<n>`) and moves the entry to "Fixed".
   `~/.striker/crew.json`: after many short-lived task agents every name of the pool is used, and a new agent
   gets the fallback `CREWMAN <n>` (the demo coordinator became `LT CREWMAN 1`). Names should be freed when their
   terminal is gone.
+- **B7** (2026-11-25, moving the working copy) Running `install.ps1` from a new folder leaves the old one's
+  `striker\bin` in the user PATH and keeps an existing Claude status line in `~/.claude/settings.json` that
+  points at the old binary. The installer should replace its own earlier PATH entry and status line.
 
 ## Fixed
 
