@@ -1,0 +1,21 @@
+{
+  "language": "German",
+  "theme": "dark",
+  "statusLine": {
+    "type": "command",
+    "command": "sh /home/awayteam/.claude/statusline.sh"
+  },
+  "permissions": {
+    "additionalDirectories": ["/var/lib/striker/status"]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true
+  },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "autoCompactWindow": 400000
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(**)",
+      "Bash(gofmt -l *)",
+      "Bash(go test ./...)",
+      "Bash(go vet ./...)",
+      "Bash(go build -o bin/striker ./cmd/striker)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(hc ls *)",
+      "Bash(hc get *)",
+      "Bash(hc read *)",
+      "Bash(hc --help)",
+      "Bash(hc help *)",
+      "Bash(herdr-app check *)",
+      "Bash(herdr-app shot *)",
+      "Bash(herdr-app do layout.select *)",
+      "Bash(curl -s 127.0.0.1:7522/*)",
+      "Bash(curl -s http://127.0.0.1:7522/*)",
+      "Bash(launchctl print *)",
+      "Bash(./bin/striker status)",
+      "Bash(node --check lcars/*)"
+    ]
+  }
+}

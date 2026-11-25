@@ -1,0 +1,38 @@
+---
+title: Introduction
+description: Striker runs a fleet of Claude Code agents across repos and machines, and keeps every decision with you.
+---
+
+Striker is a Claude Code session that runs a fleet of other Claude Code sessions for you. You talk to Striker; Striker
+passes your orders to one **lead** per repo, a lead starts one **coordinator** per change, and a coordinator
+dispatches **task agents** that write the code, review it and tick the task off. Everything that needs a decision
+(a proposal, an approval, a release, a right) comes back up the same chain to you, and nothing goes on without
+your answer.
+
+All of it runs in [Herdr](/docs/setup/prerequisites), a terminal app for agents, inside an LCARS-style frame. Striker's
+board, **Fleet Operations**, shows the whole fleet at a glance: one column per repo, who works, and what waits on
+you.
+
+![Fleet Operations: one column per repo of the demo fleet](/shots/fleet-operations.png)
+
+<Mermaid
+  chart={`flowchart LR
+  Human --> Striker --> Lead --> Coordinator --> T[Task agents]`}
+/>
+
+## Where to go next
+
+- **Concepts:** who does what in the fleet ([Roles](/docs/concepts/roles)), how orders go down and questions come
+  back up ([Command chain](/docs/concepts/command-chain)), why [decisions](/docs/concepts/decisions) stay with you, and
+  how a piece of work moves from idea to merge ([OpenSpec workflow](/docs/concepts/openspec-workflow)).
+- **[Security](/docs/security)** and **[Relay](/docs/relay)**: which boundaries hold the fleet together, and how agents
+  without access to Herdr ask Striker to act for them.
+- **Bridge:** what you see on screen. [Fleet Operations](/docs/bridge/fleet-operations) for the fleet,
+  [PLAN](/docs/bridge/plan), [SPEC](/docs/bridge/spec) and [REPO](/docs/bridge/repo) for one change in its worktree.
+- **Setup:** building it on your own computers, from the [prerequisites](/docs/setup/prerequisites) to your
+  [first lead](/docs/setup/first-lead).
+- **Reference:** the [CLI](/docs/reference/cli), the [status file](/docs/reference/status-file),
+  [labels](/docs/reference/labels) and [files](/docs/reference/files).
+
+The examples on this site use a small demo fleet: two repos, `alpha` and `beta`, and a remote machine
+`remote1` whose agents run as the user `awayteam`.

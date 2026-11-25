@@ -1,0 +1,88 @@
+---
+title: Prerequisites
+description: What has to be on your computer before you install Striker, on macOS and on Windows.
+---
+
+Striker is a Go program plus a few Claude Code sessions that talk to each other through Herdr's terminals. Before
+you run the installer, this computer needs the tools below. A [second machine](/docs/setup/remote-machine) is
+optional and has its own, shorter list.
+
+## Herdr with herdr-core (`hc`)
+
+The Herdr app is the window everything runs in: spaces, tabs and terminals, plus the mods that draw the LCARS
+frame and Striker's board. It comes with **herdr-core**, whose command line tool `hc` is how Striker sees and
+drives terminals: `hc ls` lists them, `hc get` shows one with its labels, `hc send` pastes a message,
+`hc wait` waits until an agent stops working, `hc file read --on <machine>` reads a file on another machine.
+
+Check that both are there:
+
+```sh
+hc --version
+hc server status
+```
+
+`hc` must be in `PATH` for the account you work as: `striker` calls it for every status read and every message.
+The installer also expects Herdr's settings folder at `~/.config/herdr-app` (on Windows
+`%USERPROFILE%\.config\herdr-app`); set `HERDR_APP_HOME` if yours is elsewhere.
+
+## Claude Code
+
+Every role besides yours (Striker, the leads, the coordinators, the task agents) is a Claude Code session. Install it
+and log in once, so `claude` starts without asking:
+
+```sh
+claude --version
+```
+
+Leads and coordinators are started with `--remote-control`, so they also show up in claude.ai/code and the
+Claude app. The first time an account starts a session that way, Claude asks once in the terminal to confirm
+(press Enter).
+
+The task agents follow the [Superpowers](https://github.com/obra/superpowers) skills (brainstorming, planning,
+test-driven development, reviews); install the `superpowers` plugin from the official Claude plugin
+marketplace.
+
+## Go
+
+The installer builds `striker` from source with `go build`. Install Go from [go.dev/dl](https://go.dev/dl/).
+
+```sh
+go version
+```
+
+On Windows, a shell opened before Go was installed does not have it in `PATH` yet; the installer then looks in
+Go's default folder (`C:\Program Files\Go\bin`) by itself.
+
+## Node.js and the OpenSpec CLI
+
+Work in every repo of the fleet is organised as OpenSpec changes (see
+[the OpenSpec workflow](/docs/concepts/openspec-workflow)). Agents use the `openspec` command line tool to
+validate and archive changes. It needs Node.js (with npm):
+
+```sh
+node --version
+npm install --global @fission-ai/openspec
+openspec --version
+```
+
+Node is also what builds this documentation site, if you want to run it locally.
+
+## Git
+
+Striker reads `tasks.md` and the worktrees of each change with `git`, and `striker start-coordinator` creates the
+worktree of a change with `git worktree add`. Any recent Git works. Optional: the GitHub CLI `gh`, used by the
+legacy `striker issues` command and by the bridge to show pull requests.
+
+## macOS and Windows
+
+Everything here runs on both. The differences are in how Striker is started in the background:
+
+| | macOS | Windows |
+|---|---|---|
+| Installer | `./install.sh` | `.\install.ps1` (PowerShell) |
+| Mods linked as | symlinks | junctions |
+| `striker` on `PATH` | link in `~/.local/bin` | `striker\bin` added to the user `PATH` |
+| `striker serve` runs as | a LaunchAgent (log `~/Library/Logs/striker.log`) | the hidden scheduled task `Striker` |
+
+On macOS, make sure `~/.local/bin` is in your `PATH`. Remote machines are Linux: the agents there run as a
+separate user, set up by a shell script (see [A second machine](/docs/setup/remote-machine)).

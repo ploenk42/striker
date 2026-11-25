@@ -1,0 +1,120 @@
+---
+title: The fleet file
+description: fleet.json lists your repos, where they live and who runs their agents; status_dir and agents_dir name the shared folders per machine.
+---
+
+`fleet.json` in `STRIKER_HOME` tells Striker which repos it looks after. It is read fresh on every command and on
+every tick of `striker serve`, so an edit takes effect without a restart. A leading UTF-8 byte order mark is
+accepted (Windows editors like to write one). `fleet.json` is not part of the repository: the installers copy
+`striker/fleet.example.json` to it when it does not exist yet, and from then on it is yours.
+
+## An example
+
+The demo fleet used throughout this site has two repos on this computer and one on a Linux machine called
+`remote1`, where the agents run as the user `awayteam`:
+
+```json title="striker/fleet.json"
+{
+  "repos": [
+    {
+      "name": "alpha",
+      "title": "Alpha",
+      "path": "C:/Users/you/demo/repos/alpha",
+      "space": "demo-alpha"
+    },
+    {
+      "name": "beta",
+      "title": "Beta",
+      "path": "C:/Users/you/demo/repos/beta",
+      "space": "demo-beta"
+    },
+    {
+      "name": "gamma",
+      "machine": "remote1",
+      "path": "/srv/gamma",
+      "user": "awayteam",
+      "space": "gamma"
+    }
+  ],
+  "status_dir": {
+    "": "C:/Users/you/.striker/status",
+    "remote1": "/var/lib/striker/status"
+  },
+  "agents_dir": {
+    "remote1": "/var/lib/striker/agents"
+  }
+}
+```
+
+## `repos`
+
+One entry per repo. Every field is a string.
+
+| Field | Meaning |
+|---|---|
+| `name` | The repo's name in Striker: in `striker status`, in the hc label `striker.lead=<name>`, in status file names (`<name>.json`, `<name>--<change>.json`) and in commands (`striker start-lead alpha`). Short, no spaces. |
+| `title` | Optional display name for the board; without it the board shows `name`. |
+| `machine` | The hc machine the repo is on, as `hc machine ls` names it. Leave it out (or empty) for this computer. |
+| `path` | The repo's folder on that machine. Change worktrees are created next to it, as `<folder of path>/<name>-<change>`. |
+| `user` | Who runs Claude and Git for the repo on its machine. See below. |
+| `space` | The Herdr space the lead works in. `striker start-lead` creates it under this name. |
+
+### `user`
+
+- **empty or missing:** the account `hc` logs in as on that machine (on this computer: you). No `sudo`.
+- **any other name** (the demo's `awayteam`): Striker starts the agents as that user with `sudo -u <user>`,
+  never as root. Such agents have no access to `hc`, so they cannot call `striker` or `hc` themselves; `striker
+  serve` relays for them (see [The relay](/docs/relay)), and their briefs say so.
+- **`root`:** runs through `sudo -i`. Possible, but not recommended: use a separate user instead
+  (see [A second machine](/docs/setup/remote-machine) and [Security](/docs/security)).
+
+A non-empty `user` is what makes a repo *relayed*: its lead asks for coordinators through its status file
+instead of running `striker start-coordinator`.
+
+## `status_dir`
+
+Per machine, the folder where the leads and coordinators of that machine write their status files:
+`<status_dir>/<repo>.json` for a lead, `<status_dir>/<repo>--<change>.json` for a coordinator. Striker reads them
+with `hc file read --on <machine>`. Every remote machine with a repo needs an entry; `striker start-coordinator`
+refuses a remote repo whose machine has none.
+
+When the agents run as another user, both that user (who writes) and your account (which `hc` reads as) must be
+able to use the folder. `setup/awayteam.sh` creates `/var/lib/striker/status` that way.
+
+On this computer, status files live in `~/.striker/status/`; Striker reads local leads and coordinators there.
+`striker start-lead` writes the status file path into the lead's brief from `status_dir` of the repo's machine, so
+for repos on this computer add an entry with the empty key that points at that folder:
+
+```json
+"status_dir": {
+  "": "C:/Users/you/.striker/status",
+  "remote1": "/var/lib/striker/status"
+}
+```
+
+## `agents_dir`
+
+Per machine, the folder where Claude's status line of the agents there stores model and token count, one file
+per terminal (`<agents_dir>/<terminal>.json`). The board's crew list reads it. A machine without an entry uses
+`~/.striker/agents` of the account `hc` logs in as, which is also what `striker statusline` uses on this computer.
+
+## Local leads found by label
+
+Not every repo has to be in `fleet.json`. Any terminal on this computer that carries the hc label
+`striker.lead=<name>` is a lead: `striker status` and the board list it with the folder it runs in, and read its
+status file from `~/.striker/status/<name>.json`. To make a Claude session that is already running in some repo a
+lead:
+
+```sh
+hc label t7 striker.lead=delta
+```
+
+then send it the lead brief (see [Your first lead](/docs/setup/first-lead)). `striker start-coordinator` also
+finds the repo through that label. A repo in `fleet.json` always wins over a label with the same name.
+
+## Adding a repo
+
+1. Decide where it lives (`machine`, `path`) and who runs its agents (`user`).
+2. Add the entry to `repos`; for a new remote machine also add `status_dir` and `agents_dir`.
+3. Check with `striker status`: the repo appears, with `lead: null` until one runs.
+4. Start its lead (see [Your first lead](/docs/setup/first-lead)).

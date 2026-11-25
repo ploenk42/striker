@@ -1,0 +1,1 @@
+Zur Umsetzung startest du pro Change einen Koordinator mit `striker start-coordinator {repo} <change>` (siehe `briefs/coordinator.md`); er startet die Task-Agents mit `striker dispatch <rolle> <task> --plan <change>`. Mehrere Changes laufen parallel, je mit eigenem Koordinator.

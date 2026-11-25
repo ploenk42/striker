@@ -1,0 +1,11 @@
+{
+  "repo": "alpha",
+  "updated": "2026-11-24T09:00:00Z",
+  "phase": "implement",
+  "task": "add-greeting: greeting script, name parameter and README usage",
+  "progress": { "done": 0, "total": 3 },
+  "needs_you": [
+    { "kind": "frage", "text": "Approve the greeting wording \"Hello, crew!\"?" }
+  ],
+  "note": "Plan for add-greeting is on main; the coordinator can start."
+}

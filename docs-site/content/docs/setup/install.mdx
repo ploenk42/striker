@@ -1,0 +1,109 @@
+---
+title: Install
+description: What install.sh and install.ps1 link, copy, build and register, and how to check that striker serve runs.
+---
+
+Clone the repository into your home folder and run the installer for your system from its root:
+
+```sh
+git clone https://github.com/ploenk42/striker.git ~/striker
+cd ~/striker
+./install.sh          # macOS
+```
+
+```powershell
+git clone https://github.com/ploenk42/striker.git $HOME\striker
+cd $HOME\striker
+.\install.ps1         # Windows
+```
+
+Both installers are safe to run again; run them after every pull, because Herdr does not reliably reload a
+linked mod and the `striker` binary has to be rebuilt.
+
+## What the installers do
+
+The two scripts do the same five things, each in its system's way.
+
+### 1. Link the mods into Herdr
+
+`lcars/` (the LCARS frame with Striker's board and the bridge) and `blueprint/` are linked into Herdr's
+`mods/` folder: symlinks on macOS, junctions on Windows. The repo stays the only copy, so a `git pull` changes
+the mods. If `mods/lcars` or `mods/blueprint` already exists and is **not** a link, the installer leaves it
+alone and prints `skip <mod>: … exists and is not a link`.
+
+### 2. Copy the LCARS layout
+
+`layouts/lcars.json` is copied (not linked) to `~/.config/herdr-app/layouts/lcars.json`, because Herdr writes
+to its layout file itself. Copy it again to restore the layout.
+
+### 3. Build `striker`
+
+`go build` writes `striker/bin/striker` (Windows: `striker\bin\striker.exe`). On Windows the installer first stops the
+scheduled task `Striker` and any running `striker.exe`, because a running program cannot be overwritten. Without Go
+in `PATH` the installer stops with `go not found in PATH`.
+
+### 4. Put `striker` on `PATH` and set `STRIKER_HOME`
+
+- macOS: a link `~/.local/bin/striker` to the built binary.
+- Windows: `striker\bin` is added to your user `PATH` (new shells pick it up), and the user environment variable
+  `STRIKER_HOME` is set to `<repo>\striker`.
+
+`STRIKER_HOME` is the folder where `striker` finds `fleet.json` and the briefs (`briefs/lead.md`,
+`briefs/coordinator.md`). Without it, `striker` uses `<your home>/striker/striker`, which is where the clone
+above puts it. On macOS the LaunchAgent sets `STRIKER_HOME` for `striker serve`; set it in your shell profile too
+if your clone lives elsewhere.
+
+The installer also runs `striker install-statusline`: if your Claude Code settings
+(`~/.claude/settings.json`) have no status line yet, it sets `striker statusline` as the status line. That
+command prints the model and token count as usual and stores them per terminal in `~/.striker/agents/`, which is
+how the board's crew list shows model and tokens for each local agent. An existing status line is left as it
+is.
+
+### 5. Run `striker serve` in the background, at login
+
+- macOS: the LaunchAgent from `striker/launchd/` is filled in with your repo and home paths, written to
+  `~/Library/LaunchAgents/` and started with `launchctl bootstrap`. It runs at login, is restarted if it
+  stops, and logs to `~/Library/Logs/striker.log`.
+- Windows: a hidden scheduled task `Striker` runs `striker.exe serve` at logon inside a console without a window
+  (`conhost --headless`), so closing a window can never stop it. It is restarted up to three times a minute
+  apart if it fails. The installer starts it right away.
+
+## What `striker serve` does
+
+`striker serve` listens on **`127.0.0.1:7522`**, on the loopback interface only; it refuses any other address
+and answers `403` to requests whose `Host` is not `127.0.0.1` or `localhost` on that port, so no web page can
+reach it through DNS tricks. It:
+
+- builds the fleet status (the same JSON as `striker status`) every 20 seconds and serves it at `/status`; the
+  LCARS board reads it there;
+- serves the crew list at `/crew` and the data of the bridge views;
+- every 10 seconds, carries out the requests that agents without `hc` write into their status files (see
+  [The relay](/docs/relay)).
+
+Its own memory is `~/.striker/`: `status/` (status files of local leads and coordinators), `agents/` (status
+line files), `relay.json` (the relay's ledger), `crew.json`.
+
+## Check that it runs
+
+```sh
+curl http://127.0.0.1:7522/status
+```
+
+You get a JSON object with `updated` and `repos`. With an empty fleet `repos` is an empty list; that is fine
+until you [describe your fleet](/docs/setup/fleet). In Herdr, switch to the LCARS layout: the STRIKER slab in the
+sidebar opens the board, which shows the same data.
+
+If nothing answers:
+
+- macOS: read `~/Library/Logs/striker.log`; `launchctl print gui/$(id -u)` lists the job.
+- Windows: `Get-ScheduledTask -TaskName Striker` shows its state; run `striker serve` in a terminal to see its
+  errors directly (stop the task first, only one can listen on the port).
+
+`striker status` on the command line needs no server: it reads `fleet.json`, asks `hc` and prints the same report.
+
+## Striker itself
+
+Striker, the session you talk to, is a Claude Code started in `STRIKER_HOME` (the `striker/` folder of the clone):
+its role and rules are in `striker/CLAUDE.md`, which Claude reads when it starts there. Open a terminal in Herdr,
+change into that folder and run `claude`. From there on you ask Striker, and Striker uses `striker status`,
+`striker send` and the other commands for you.

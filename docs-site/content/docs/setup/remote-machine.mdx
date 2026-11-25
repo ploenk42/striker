@@ -1,0 +1,152 @@
+---
+title: A second machine
+description: Running repos on a Linux machine, with hc there, a separate user for the agents, the sudo rule, their Claude settings and status line.
+---
+
+A repo does not have to live on the computer you sit at. A Linux server can hold repos whose leads,
+coordinators and task agents run there, while you keep talking to Striker on your own computer. This page sets up
+such a machine; the examples call it `remote1` and the agents' user `awayteam`.
+
+Why a separate user: whoever can use your `hc` acts as you, on every machine `hc` reaches. The agents on the
+server therefore do not run as you and get no `hc` access. They run as `awayteam`, which may do what the repos
+need and nothing more. [Security](/docs/security) explains the boundaries.
+
+## 1. Reach the machine with `hc`
+
+On your computer, add the machine to herdr-core (it connects over SSH, so your SSH key has to work first):
+
+```sh
+hc machine add remote1
+hc machine ls
+```
+
+`hc` then runs a herdr-core server on that machine, as the account you log in with over SSH;
+`hc machine update remote1` copies your current `hc` there and restarts it (its terminals keep running).
+If the server asks for a password or code later, `hc machine login remote1` logs in again. Check that it
+works:
+
+```sh
+hc exec --on remote1 whoami
+```
+
+The answer is your account on the server. This account (not `awayteam`) is the one Striker uses for everything
+on that machine.
+
+## 2. Put the repos on the server
+
+Clone each repo where it should live, for example `/srv/gamma`. Change worktrees are created next to it
+(`/srv/gamma-<change>`), so the parent folder must be writable for the agents. The setup script always opens
+`/opt` for that (`setfacl -m "u:$AGENT:rwx" /opt`); if your repos live elsewhere, change that line to their
+parent folder before you run it.
+
+## 3. Copy the setup files over
+
+The script and its two companions are in `striker/setup/` of this repo:
+
+| File | What it is |
+|---|---|
+| `awayteam.sh` | the one-time setup, run as root |
+| `awayteam-settings.json` | Claude Code settings for `awayteam` |
+| `statusline.sh` | the status line for the agents on Linux |
+
+Copy all three with `hc put`, which sends a local file beside a terminal on that machine and prints where it
+landed. Open any terminal on the server (`hc run --on remote1 --bg bash` gives you one), then:
+
+```sh
+hc put remote1/t1 striker/setup/awayteam.sh
+hc put remote1/t1 striker/setup/awayteam-settings.json
+hc put remote1/t1 striker/setup/statusline.sh
+```
+
+<Callout type="warn">
+  Do not copy them through a PowerShell pipe (`Get-Content … | hc exec …`): PowerShell adds a byte order mark
+  and Windows line ends, and the shell script stops working. If a file of that name is already there, `hc put`
+  writes `awayteam-2.sh` instead; delete the old copies first so all three land side by side.
+</Callout>
+
+## 4. Adjust and run `awayteam.sh` as root
+
+The script takes your account on the server (the one hc runs as, the owner) and the repos the agents work in
+as arguments. On the server:
+
+```sh
+sudo bash ./awayteam.sh you /srv/gamma
+```
+
+The agents' user is `awayteam`; the shared folders are `/var/lib/striker/status` (`status_dir` in
+`fleet.json`) and `/var/lib/striker/agents` (`agents_dir`).
+
+The script is idempotent: running it again changes nothing that is already in place, so rerun it after you add
+a repo (with all repos as arguments) or update `statusline.sh`. It needs `setfacl` (`apt install acl`). It:
+
+- creates the user `awayteam` with its own group and home, adds it to `docker` if that group exists, and
+  removes it from `sudo` if it is in it;
+- gives `awayteam` read and write access to each repo and its worktrees through ACLs (default ACLs too, so new
+  files stay writable), without changing the owners, and lets it create new worktrees in the parent folder;
+- marks all repos as safe for `awayteam`'s Git and copies your `user.name` and `user.email` to it, so the
+  agents' commits carry your identity;
+- creates the shared status folder and status line folder (owner you, group `awayteam`, setgid, default ACLs
+  for both), so the agents can write and `hc`, as you, can read;
+- writes the sudo rule (below) to `/etc/sudoers.d/striker`, checked with `visudo` first;
+- installs Claude Code for `awayteam` if it is missing, and copies root's Claude project memory over if there
+  is one;
+- installs `awayteam-settings.json` as `/home/awayteam/.claude/settings.json` (only if that file has no status
+  line yet, so your later edits stay) and `statusline.sh` as `/home/awayteam/.claude/statusline.sh` (always,
+  so a rerun brings the latest version).
+
+It ends with one thing left to do by hand: log `awayteam` in to Claude once.
+
+```sh
+sudo -u awayteam -i claude
+```
+
+## The sudo rule
+
+```text title="/etc/sudoers.d/striker"
+you ALL=(awayteam) NOPASSWD: ALL
+```
+
+Your account may run any command **as `awayteam`** without a password, and nothing else. `awayteam` itself is
+not in any sudoers rule and cannot become root. Striker uses exactly this: it starts a lead as
+
+```sh
+sudo --preserve-env=HC_TERMINAL_ID -u awayteam -i sh -c "cd '/srv/gamma' && exec \"$HOME/.local/bin/claude\" --remote-control 'lead gamma'"
+```
+
+`--preserve-env=HC_TERMINAL_ID` carries the terminal's id across `sudo`, so the agent's status line knows which
+terminal it belongs to. Reading files and running Git as the agents' user goes through `sudo -n -u awayteam
+-i`, which fails instead of asking for a password.
+
+## Settings and status line
+
+`awayteam-settings.json` is a starting point; edit it before you run the script (or edit the installed file
+afterwards). What matters for Striker:
+
+- `statusLine`: `sh /home/awayteam/.claude/statusline.sh`. The script prints `<model> · <tokens>` and stores
+  what Claude sends as `<agents_dir>/<terminal>.json`, the same format `striker statusline` writes on your own
+  computer, so the board's crew list shows model and tokens for remote agents too. It writes to
+  `/var/lib/striker/agents` unless `STRIKER_AGENTS_DIR` says otherwise.
+- `permissions.additionalDirectories`: the status folder, so the agents may write their status files outside
+  the repo.
+- `enabledPlugins`: at least `superpowers@claude-plugins-official`, which the coordinators and task agents
+  work with.
+
+Language, theme and the other plugins in the file are a matter of taste.
+
+## 5. Tell Striker about it
+
+Add the repo and the machine's folders to `fleet.json` (see [The fleet file](/docs/setup/fleet)):
+
+```json
+{
+  "name": "gamma",
+  "machine": "remote1",
+  "path": "/srv/gamma",
+  "user": "awayteam",
+  "space": "gamma"
+}
+```
+
+with `"status_dir": { "remote1": "/var/lib/striker/status" }` and
+`"agents_dir": { "remote1": "/var/lib/striker/agents" }`. `striker status` now lists `gamma` with `lead: null`;
+[start its lead](/docs/setup/first-lead).

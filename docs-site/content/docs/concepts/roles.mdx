@@ -1,0 +1,87 @@
+---
+title: Roles
+description: Human, Striker, lead, coordinator and task agent, and who runs where, as whom, with which labels.
+---
+
+Striker is a chain of Claude Code sessions, each with one job. Every session runs in a
+Herdr terminal, and every terminal can carry labels (`hc label <addr> key=value`).
+Striker and the bridge find the sessions by those labels, not by their names or positions.
+
+| Role | Runs on | As user | Labels | Started by |
+| --- | --- | --- | --- | --- |
+| Human | this computer | the person | none | – |
+| Striker | this computer | the person | `striker.self` | the person, by hand |
+| Lead | the repo's machine | `user` from `fleet.json` | `striker.lead=<repo>` | `striker start-lead <repo>` |
+| Coordinator | the repo's machine, in the change's worktree | same as the lead | `striker.coordinator=<change>`, `striker.repo=<repo>` | `striker start-coordinator <repo> <change>` |
+| Task agent | the coordinator's worktree | same as the coordinator | `striker.task`, `striker.role`, `striker.topic`, `striker.repo` | `striker dispatch <role> <task> --plan <change>` |
+
+## Human
+
+The person who owns the fleet. They talk only to Striker, and they make every decision that matters:
+proposals, approvals, releases and rights (see [Decisions](/docs/concepts/decisions)). They can also
+type into any agent's terminal directly when an agent asks there.
+
+## Striker
+
+The control room. Striker is a Claude Code session started in the `striker/` folder of this repository, so it
+reads `striker/CLAUDE.md` as its instructions. It knows every repo from `fleet.json`, keeps track of how each
+one stands, and passes the person's orders to the right lead.
+
+- **Where:** this computer, in its own Herdr space (or in the space of its own repo, as that repo's lead).
+- **As whom:** the person's account, the only one that talks to `hc`.
+- **Label:** `striker.self`. The bridge looks for that label to find Striker; when Striker is also the lead of
+  its own repo, it carries `striker.lead=<repo>` as well.
+- **What it never does:** work in the fleet's repos (no code, no commits, no files there), decide for the
+  person, or interrupt a working agent.
+
+Next to the Claude session, `striker serve` runs in the background on the same computer (`127.0.0.1:7522`). It
+serves the bridge and, every 10 seconds, carries out the requests of agents that cannot reach `hc`
+themselves (see [Command chain](/docs/concepts/command-chain)).
+
+## Lead
+
+One Claude Code per repo. A lead works by the rules of its repo (its `CLAUDE.md` / `AGENTS.md`), plans
+work as OpenSpec changes, starts a coordinator for each change, and keeps a status file for Striker.
+
+- **Where:** in the repo's Herdr space on the repo's machine (`machine` and `path` in `fleet.json`); the
+  space has a tab `claude`.
+- **As whom:** the `user` from `fleet.json`. Without `user` it is the account `hc` logs in as. With a user
+  such as `awayteam`, Claude runs through `sudo -u awayteam`, never as root.
+- **Label:** `striker.lead=<repo>`. Local leads that are not in `fleet.json` are found by this label alone.
+- **Started:** `striker start-lead <repo>` creates the space, starts Claude in the repo, sets the label and
+  sends the brief (`briefs/lead.md`). A Claude that already runs in the repo can be made a lead by hand:
+  `hc label <addr> striker.lead=<repo>`, then send it the brief.
+- **Reports:** `<status_dir>/<repo>.json` on its machine.
+
+## Coordinator
+
+One Claude Code per OpenSpec change. It carries the change out: it reads the tasks, starts a task agent for
+each implementation and each review, decides what it can and collects the rest for the person.
+
+- **Where:** the repo's machine, in the change's worktree (branch `x-branch`, default the change name), in
+  a space `<repo>-<change>` with the tab `coord <change>`.
+- **As whom:** the same user as the repo's lead.
+- **Labels:** `striker.coordinator=<change>` and `striker.repo=<repo>`.
+- **Started:** `striker start-coordinator <repo> <change>`, by the lead, or by Striker on the person's word.
+  For a repo with a `user`, the lead cannot run `striker` itself; it writes a `start-coordinator` request into
+  its status file and `striker serve` starts the coordinator for it.
+- **Reports:** `<status_dir>/<repo>--<change>.json`.
+
+## Task agent
+
+A Claude Code session for one task in one role. The usual roles are `implementer`, `spec-reviewer` and
+`quality-reviewer`: for each task, an implementer does the work, then a spec reviewer checks it against
+the plan and the design, then a quality reviewer checks the code.
+
+- **Where:** in the coordinator's worktree, as a terminal named `<role>-<task>` (for example
+  `implementer-2.3`); a relayed task agent appears under its coordinator in the sidebar.
+- **As whom:** the same user as the coordinator.
+- **Labels:** `striker.task=<task id>`, `striker.role=<role>`, `striker.topic=<change>`, `striker.repo=<repo>`.
+- **Started:** `striker dispatch <role> <task> --plan <change>` by the coordinator, or by `striker serve`
+  on a `dispatch` request in the coordinator's status file. Its first message names the task, the
+  change's files and the shell rules.
+- **Reports:** to its coordinator only, with its last answer in the terminal. Task agents never escalate
+  past their coordinator.
+
+Each coordinator starts task agents as separate, labelled terminals instead of in-process subagents, so the
+person can see every one of them on the bridge and type into it.

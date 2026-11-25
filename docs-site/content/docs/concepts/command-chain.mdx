@@ -1,0 +1,98 @@
+---
+title: Command chain
+description: How orders travel down from the human to the task agents, and how status and questions travel back up.
+---
+
+Orders go down one step at a time, and every step has one mechanism. Status and questions come back up
+through status files, which Striker reads; nobody below Striker talks to the human directly.
+
+<Mermaid
+  chart={`flowchart TD
+  H["Human"]
+  R["Striker<br/>this computer"]
+  L["Lead<br/>one per repo, on its machine"]
+  C["Coordinator<br/>one per change, in its worktree"]
+  T["Task agents<br/>implementer, spec reviewer, quality reviewer"]
+  H -->|"talks to Striker"| R
+  R -->|"striker send"| L
+  L -->|"striker start-coordinator<br/>or relay request"| C
+  C -->|"striker dispatch<br/>or relay request"| T
+  T -.->|"last answer in the terminal"| C
+  C -.->|"status file, needs_you"| R
+  L -.->|"status file, needs_you"| R
+  R -.->|"striker status, bundled questions"| H
+  H -.->|"answer, passed down verbatim"| R`}
+/>
+
+Solid arrows are orders; dashed arrows are reports, and the person's answer, which Striker passes on word for
+word.
+
+## The way down
+
+**Human to Striker.** The person types into Striker's terminal. That is the only place they need to talk to.
+
+**Striker to a lead.** `striker send <addr> "<text>"` delivers a message to the lead's terminal. Every message
+starts with `[Striker]`, so the lead knows it comes from the person through Striker. Long texts go in a file:
+`striker send <addr> --file <file>`. If the lead is busy, the message waits in its input; Striker never
+interrupts.
+
+**Lead to a coordinator.** For each OpenSpec change the lead starts a coordinator:
+`striker start-coordinator <repo> <change>` creates the worktree from the change's `x-branch` if it is
+missing, opens the space `<repo>-<change>`, labels the terminal and sends the coordinator brief.
+
+**Coordinator to task agents.** The coordinator starts one terminal per task and role:
+`striker dispatch <role> <task> --plan <change>`, for example
+`striker dispatch implementer 2.3 --plan add-greeting`. The command prints the new terminal's address; the
+coordinator waits with `hc wait <addr>` and reads the result with `hc read <addr>`.
+
+**Relay requests.** On a machine where the agents run as a separate user (such as `awayteam`), they cannot
+call `striker` or `hc`. Instead they write a request into their own status file, and `striker serve` carries it
+out within 10 seconds:
+
+```json
+{ "id": "c-add-greeting-1", "do": "start-coordinator", "change": "add-greeting" }
+```
+
+```json
+{ "id": "2.3-impl-1", "do": "dispatch", "role": "implementer", "task": "2.3" }
+```
+
+The lead may ask for `start-coordinator`; the coordinator for `dispatch` and `send` (to its own task
+agents). Striker answers each request once with a `[Striker] Anfrage <id>: …` ("request `<id>`: …") message in the agent's terminal.
+See [Relay](/docs/relay) for the details.
+
+## The way up
+
+**Task agent to coordinator.** A task agent ends with a short summary of what it did and what the tests
+say. A coordinator with `hc` reads it after `hc wait`; for a relayed coordinator, `striker serve` sends it the
+task agent's last answer as soon as the agent is done, waits for input or ends.
+
+**Coordinator and lead to Striker: status files.** Every lead keeps `<status_dir>/<repo>.json`, every
+coordinator `<status_dir>/<repo>--<change>.json`, on the repo's machine. They hold the phase, the current
+task, the progress (`done` / `total` from `tasks.md`), a one-line note and the list `needs_you`:
+
+```json
+{
+  "repo": "alpha",
+  "updated": "2026-11-24T09:30:00Z",
+  "phase": "implement",
+  "task": "Add the greeting command",
+  "progress": { "done": 1, "total": 3 },
+  "needs_you": [
+    { "kind": "abnahme", "text": "Approve the greeting wording?" }
+  ],
+  "note": "Task 1 merged, task 2 in review."
+}
+```
+
+`needs_you` is where an agent puts everything it cannot decide: proposals, approvals, releases, rights and
+open questions. A coordinator can add `"task": "<id>"` to an entry, and the bridge then shows that task as
+NEEDS YOU.
+
+**Striker to the human.** `striker status` prints, for every repo, the lead's address and live state, its status
+file and its coordinators with their status files. Striker starts with it before asking anyone, collects the
+`needs_you` entries of all leads and coordinators and lays them before the person in one bundle.
+
+**The answer goes down again.** Striker passes the person's answer to the agent that asked, word for word:
+`[Striker] Antwort des Menschen: "…"` ("the human's answer"). See [Decisions](/docs/concepts/decisions)
+for why it has to be verbatim.

@@ -1,0 +1,19 @@
+{
+  "repos": [
+    {
+      "name": "alpha",
+      "title": "Alpha",
+      "path": "{repos}/alpha",
+      "space": "demo-alpha"
+    },
+    {
+      "name": "beta",
+      "title": "Beta",
+      "path": "{repos}/beta",
+      "space": "demo-beta"
+    }
+  ],
+  "status_dir": {
+    "": "{status}"
+  }
+}

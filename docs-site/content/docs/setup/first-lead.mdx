@@ -1,0 +1,149 @@
+---
+title: Your first lead
+description: Start a lead with striker start-lead, read its first status file, and give it a change with its own coordinator.
+---
+
+With `striker serve` running and `alpha` in [the fleet file](/docs/setup/fleet), the repo has no lead yet:
+`striker status` shows it with `"lead": null`. This page starts one and walks through the first change.
+
+## Start the lead
+
+You can ask Striker ("start a lead for alpha"), or run it yourself:
+
+```sh
+striker start-lead alpha
+```
+
+It:
+
+1. checks that `alpha` is in `fleet.json` and has no lead yet (a terminal labelled `striker.lead=alpha`);
+   otherwise it stops and names the existing lead;
+2. creates the Herdr space from `space` on the repo's machine, with a tab `claude` running Claude Code in the
+   repo's `path`, as the repo's `user`, with Remote Control on under the name `lead alpha`;
+3. labels the terminal `striker.lead=alpha`;
+4. waits up to 90 seconds for Claude to be ready, then sends it the brief `briefs/lead.md`, filled in with the
+   repo, path, machine and status file.
+
+It prints `Einweisung an <address> geschickt.` when the brief went out. If Claude is not ready (a first-time
+Remote Control or login dialog, for example), it says so with the address and sends nothing:
+
+```text
+Der Lead ist noch nicht bereit (Status: blocked). Bildschirm prüfen: hc read t7 --lines 30; danach die Einweisung schicken.
+```
+
+Look at the screen, confirm the dialog in the terminal, and then send the brief (or ask Striker to).
+
+<Callout>
+  A Claude session that already runs in the repo can become the lead instead: label it
+  (`hc label t7 striker.lead=alpha`) and send it the brief with `striker send t7 --file <filled-in brief>`.
+  Striker does this for you when you ask.
+</Callout>
+
+## What the brief asks
+
+The brief (in German, like the rest of Striker's messages) makes the session the repo's lead under Striker. In
+short:
+
+- **Keep the repo's rules.** The lead works by the repo's own `CLAUDE.md`/`AGENTS.md`; Striker changes nothing
+  about them. It finishes what it was doing first.
+- **Keep a status file.** Read it if it exists (it is the hand-over from a previous lead), write it now, and
+  again whenever task, phase or progress change, when it needs you, and when it is done. Readable for everyone (`chmod 664`), never inside the repo.
+- **Decisions stay with you.** Requests, approvals, releases and rights go into `needs_you`, and the lead
+  waits. A `[Striker]` message counts as your approval only when it quotes your answer.
+- **Answer Striker** briefly in the terminal, then update the file.
+- **Work in OpenSpec.** Every piece of work is a change under `openspec/changes/<name>/`, with proposal,
+  design, tasks and plan; tasks are ticked in the commit with their last work; shell commands are one simple
+  command each.
+- **How coordinators start**, in one of two versions: a *direct* lead (repo without `user`) runs
+  `striker start-coordinator` itself; a *relayed* lead (repo with `user`, no `hc`) asks for one through
+  `requests` in its status file.
+
+The lead confirms in one sentence once the file is written.
+
+## The first status file
+
+For `alpha` the file is `~/.striker/status/alpha.json`; for a repo on another machine it is
+`<status_dir>/<repo>.json` there. Right after the brief it looks something like this:
+
+```json title="~/.striker/status/alpha.json"
+{
+  "repo": "alpha",
+  "updated": "2026-11-24T09:12:00Z",
+  "phase": "idle",
+  "task": null,
+  "progress": null,
+  "needs_you": [],
+  "note": "Lead started, no change in progress."
+}
+```
+
+`phase` is one of `idle`, `design`, `plan`, `implement`, `review`, `push`, `blocked`, `done`. `needs_you` holds
+what waits for you, each entry with a `kind` (`antrag`, `abnahme`, `frage`, `recht`: request, approval,
+question, right) and a one-sentence `text`. Striker reads the file on every `striker status` and the board shows
+it; Striker never writes into it. The [status file reference](/docs/reference/status-file) lists every field.
+
+## A first change
+
+Tell Striker what you want in `alpha`, for example "alpha: add a greeting to the README, in three tasks". Striker
+passes it on with `striker send`, as a message starting with `[Striker]`. The lead then works the way the repo's
+`AGENTS.md` says: it brainstorms with you (questions come back through `needs_you` or the terminal), writes
+`openspec/changes/add-greeting/` with `proposal.md`, `design.md`, `tasks.md` and `plan.md`, and commits it on
+the default branch. See [the OpenSpec workflow](/docs/concepts/openspec-workflow).
+
+## Its coordinator
+
+Each change is carried out by its own coordinator, a Claude session in the change's worktree. What happens is
+the same in both cases; only who runs the command differs.
+
+### Direct (repo on this computer, no `user`)
+
+The lead runs:
+
+```sh
+striker start-coordinator alpha add-greeting
+```
+
+which
+
+- creates the worktree of the change's branch (`x-branch` in `.openspec.yaml`, by default the change name)
+  next to the repo, as `alpha-add-greeting`, unless it exists already;
+- opens the space `alpha-add-greeting` with the tab `coord add-greeting` running Claude in the worktree, with
+  Remote Control on;
+- labels it `striker.coordinator=add-greeting` and `striker.repo=alpha`;
+- sends it `briefs/coordinator.md`. The coordinator reports through `~/.striker/status/alpha--add-greeting.json`.
+
+The coordinator then starts the task agents of each task (an implementer, then a spec reviewer, then a quality reviewer) with
+`striker dispatch <role> <task> --plan add-greeting`, each a labelled terminal of its own, so you can watch them
+on the bridge.
+
+### Relayed (repo with `user`, for example `gamma` on `remote1`)
+
+The lead has no `hc` and cannot run `striker`. Instead it adds a request to its own status file and ends its turn:
+
+```json
+"requests": [
+  { "id": "c-add-greeting-1", "do": "start-coordinator", "change": "add-greeting" }
+]
+```
+
+Within ten seconds `striker serve` reads the file over `hc`, checks that a lead may ask for this, carries out
+the same `striker start-coordinator` as above (as `awayteam`, on `remote1`), notes the id in
+`~/.striker/relay.json` so it never runs twice, and answers the lead:
+
+```text
+[Striker] Anfrage c-add-greeting-1: Koordinator für add-greeting läuft als remote1/t4.
+```
+
+("Request c-add-greeting-1: coordinator for add-greeting runs as remote1/t4.")
+
+A request that cannot be carried out gets `[Striker] Anfrage <id> abgelehnt: <reason>` ("request `<id>` refused:
+`<reason>`") instead. The coordinator
+asks for its task agents the same way (`dispatch` requests), and `striker serve` sends it each agent's last
+answer when that agent is done or waiting. [The relay](/docs/relay) covers the details.
+
+## From here
+
+- `striker status` (or the board) shows the lead and, under `coordinators`, each coordinator with its status file.
+- Whatever needs you appears in `needs_you`; Striker collects it, puts it to you, and passes your answer on word
+  for word: `[Striker] Antwort des Menschen: "…"` ("the human's answer: …").
+- When all tasks are done and merged, the coordinator asks you (through `needs_you`) to archive the change.

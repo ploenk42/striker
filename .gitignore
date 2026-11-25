@@ -1,0 +1,8 @@
+# written by herdr-app check / Herdr on every start
+gpui-kit.d.ts
+jsconfig.json
+.superpowers/
+striker/bin/
+# the person's own fleet; the installers copy striker/fleet.example.json here when it is missing
+striker/fleet.json
+.claude/settings.local.json

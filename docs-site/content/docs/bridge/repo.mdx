@@ -1,0 +1,85 @@
+---
+title: REPO
+description: The bottom field shows the repo as a tree of commits, changes and tasks, or a live terminal in its place.
+---
+
+Under OVERVIEW, PLAN and SPEC sits the bottom field. By default it shows the **REPO tree**: the repo's history and
+its changes as lanes, with the tasks still to do drawn after NOW. A click on a card or on a title swaps the tree
+for a live terminal, and the round **◂ REPO** button swaps it back.
+
+![The REPO tree of the demo repo alpha: the lane of add-greeting forks off MAIN, task 1 working, tasks 2 and 3 on parallel lanes after NOW](/shots/repo.png)
+
+## The rule
+
+Over the field runs a thin rule with a label. Its colour and text say what the field shows:
+
+| Rule | Colour | The field shows |
+| --- | --- | --- |
+| `REPO` | peach | The tree |
+| `COORDINATOR · <change>` | orange | The change's coordinator (after a click on the title in PLAN or SPEC, or on a coordinator card in OVERVIEW) |
+| `TASK 2 · IMPLEMENTER · LIVE` | blue | A task agent (after a click on a WORKING card) |
+| `TASK 2 · IMPLEMENTER · LIVE` | red | A task agent that needs you (after a click on a NEEDS YOU card) |
+
+While a terminal is shown, the rule ends in a round **◂ REPO** button. **Click:** the tree comes back.
+
+## Reading the tree
+
+The tree reads from left to right, oldest to newest.
+
+- **The trunk** is the default branch: a straight orange line labelled **MAIN** at its left end, with a small tick
+  for every commit. Older history is pressed closer together, so recent work gets the room.
+- **NOW** is a dotted vertical rule with an orange `NOW` tag at the head of the trunk. Everything left of it has
+  happened; everything right of it is still to do, and is drawn dashed.
+- **A lane** is one change (or legacy plan). It forks off the trunk where its branch starts, shows the branch's
+  commits as its past, and merges back into the trunk when the change is merged. Edges are drawn the way git
+  graphs draw them: a fork bends in the first gap and a merge in the last, so no edge cuts across another lane.
+- **Parallel lanes:** when a change has several open tasks that may run side by side, they get extra lanes below
+  the change's own lane, without a label.
+- **Future lanes**, for changes that have not started, are dashed and faded.
+
+### Nodes
+
+Each task is a node on its change's lane:
+
+| Mark | Task |
+| --- | --- |
+| Filled (gold) | Done |
+| Ring (blue) | Working |
+| Ring (red) | Needs you |
+| Solid ring (gray) | Interrupted: work stopped there and nobody is on it |
+| Dashed ring | Not started |
+
+A change that already has branch commits shows those commits as its past, not separate nodes for its done tasks.
+
+### Lane colours and labels
+
+A lane has the colour of its change, by the same rule as OVERVIEW's ovals and cards: blue while someone works on it,
+red while its coordinator asks you, gold when it is ready or merged, gray when it is interrupted, blocked or only
+planned.
+
+Its label stands where the branch starts, right-aligned and in the lane's colour: `<CHANGE> <done>/<total>`, then
+`· THIS PLAN` on the lane of the worktree's own change, or `· AFTER <change>` on a lane that waits for another
+change to be archived. When there is little room, the suffix goes first, then the progress, then the name is cut
+with `…`. `+2 LANES` means that lanes were folded because the field is too small to show them all.
+
+## The terminal in the bottom field
+
+The terminal in the bottom field is the real one: you can scroll it, read the agent's last answer, and type into
+it, for example to answer an agent that is waiting on you. It is the same terminal that sits in the agent's own
+tab; the Bridge only shows it in a second place.
+
+When the agent's terminal ends (the task is done and the agent closed), the field goes back to the tree by itself.
+It also goes back when you leave the Bridge, so the next time you open it, it starts with the tree again.
+
+### How the swap works
+
+The bottom field is a block of the LCARS layout (`bridge-bottom`, under the rule block `bridge-rule`). Showing a
+terminal rewrites that one block in the shown layout with `layout.set`; going back puts the Bridge's own content
+there again. Nothing else in the layout changes.
+
+For that reason `layouts/lcars.json` in the repository is stored in Herdr's own key order with LF line ends
+(enforced by `.gitattributes`): swapping back then leaves the file byte for byte as it was. If you edit the file by
+hand, keep that form.
+
+Two commands do the same as the clicks, for a key binding or `herdr-app do`: `lcars.coordinator` shows the
+coordinator of the shown change, and `lcars.repo` brings the tree back.

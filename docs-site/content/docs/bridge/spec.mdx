@@ -1,0 +1,82 @@
+---
+title: SPEC
+description: The change's design as a document, its headings on a narrow elbow, and what is not committed yet marked per block.
+---
+
+SPEC shows a document instead of tasks: a narrow orange elbow with the document's headings on the left, the
+document itself on the right. You open it with the **SPEC** pseudo-tab at the left of the tab bar.
+
+![SPEC of the change add-greeting: one block removed, two added, not committed yet](/shots/spec.png)
+
+## Which document
+
+| Where the space is | SPEC shows |
+| --- | --- |
+| A change's worktree | The change's `design.md` |
+| A legacy plan's worktree | The plan's spec file |
+| The main checkout | A list of all of the repo's specs on the elbow (see [below](#on-the-main-checkout)) |
+| A change picked in OVERVIEW | That change's design, read from the main checkout |
+
+## The arm
+
+The arm at the top reads `SPEC · <change>`. At its right end stand the file's path and whether the worktree
+changed it:
+
+- `NO CHANGES VS HEAD`: the file is as committed;
+- `WORKTREE DIRTY · +3 −1 VS HEAD`: the file has changes that are not committed yet, counted as added and removed
+  lines of the diff hunks (not blocks: two added blocks and one removed one can read `+4 −2`).
+
+**Click on the arm:** shows the change's coordinator in the bottom field, while one runs, just as in PLAN.
+
+## The headings
+
+The elbow lists the document's `##` headings, one row each. A heading whose section holds changes shows a small
+`+a −r` pill.
+
+**Click on a heading:** marks it (the row turns black with orange text and a `▸`) and scrolls its section to the top
+of the reading area. The mark stays on the heading you clicked last: Herdr cannot tell the Bridge which section is
+in view while you scroll yourself, so the elbow does not follow the scroll bar.
+
+## The reading area
+
+The document is rendered as Markdown, in tan on black. What changed against the last commit is marked block by
+block:
+
+| Block | Looks like |
+| --- | --- |
+| Unchanged | Plain text |
+| Added (not committed yet) | A 4 px blue bar on its left; the text stays tan |
+| Removed (in HEAD, gone from the worktree) | Gray and struck through, as plain text: a code block keeps its lines, a list shows one line per item |
+
+So while an agent rewrites the design, you can see what it added and what it dropped before it commits. After the
+commit the marks are gone, and the arm says `NO CHANGES VS HEAD` again.
+
+SPEC asks `striker serve` for the document when it opens and then every 10 seconds while it stays open.
+
+## On the main checkout
+
+On the main checkout (no change of its own, nothing picked in OVERVIEW) the elbow becomes a list of files: every
+spec of the repo, with the shown one open.
+
+![SPEC on the main checkout of the demo repo beta: its one spec, open with its headings](/shots/spec-main.png)
+
+- The list holds the living specs (`openspec/specs/<capability>/spec.md`), the `design.md` of each active change,
+  and any legacy specs.
+- Each file is a bold row, `▸ <name>`. **Click on a file:** shows it; its row turns black (`▾ <name>`) and its
+  headings are listed under it, indented. They work as above.
+- The first file is shown until you pick another one.
+
+On the main checkout PLAN reads the repo's vision file in the same way (the arm then reads `VISION · <title>`),
+because the main checkout has no tasks of its own to show. OVERVIEW's vision row takes you there with its
+`<FILE> IN SPEC ▸` button.
+
+## Messages
+
+| Message | Means |
+| --- | --- |
+| `READING SPEC …` | The document has not come from `striker serve` yet |
+| `NO SPEC FOR PLAN <change>` | The change has no design file |
+| `NO HEADINGS` | The document has no `##` headings |
+| `SPEC IS EMPTY` | The file is empty |
+| `NO SPECS IN THIS REPO` | On the main checkout: there is no spec to list |
+| `SPEC UNREADABLE: …` | `striker serve` could not read the file; the last good copy stays |

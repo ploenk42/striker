@@ -1,0 +1,108 @@
+---
+title: Files
+description: Where Striker keeps its configuration, the briefs, status files, status line files and its relay ledger.
+---
+
+Striker keeps two kinds of files: its configuration in the Striker home (part of the striker checkout), and its
+working state under `~/.striker` in the home folder of the person's account.
+
+## The Striker home and STRIKER_HOME
+
+The Striker home holds `fleet.json` and the briefs. striker looks for it at:
+
+1. the environment variable `STRIKER_HOME`, if set;
+2. otherwise `<user home>/striker/striker`.
+
+The Windows installer sets `STRIKER_HOME` for the user to the `striker` folder of the checkout, so the scheduled task
+`Striker` and the CLI find the same files wherever the repo lives. Pointing `STRIKER_HOME` at another folder (for example
+a demo fleet) makes every striker command use that folder's `fleet.json` and briefs.
+
+| File | Purpose |
+| --- | --- |
+| `fleet.json` | the repos (machine, path, user, space), `status_dir` and `agents_dir` per machine |
+| `briefs/lead.md` | the lead brief, with the format of its status file |
+| `briefs/coordinator.md` | the coordinator brief |
+| `CLAUDE.md` | Striker's own role and rules (read by Striker's Claude, not by the program) |
+
+### The briefs
+
+A brief is the first message an agent gets: who it is, who is above it, its rules and where its status file is.
+striker reads the brief from the Striker home each time it starts an agent and fills its placeholders:
+
+| Brief | Placeholders |
+| --- | --- |
+| `briefs/lead.md` | `{repo}`, `{path}`, `{machine}`, `{status_file}`, `{coordinators}` |
+| `briefs/coordinator.md` | `{repo}`, `{change}`, `{status_file}`, `{agents}` |
+
+`{coordinators}` (how a lead starts coordinators) and `{agents}` (how a coordinator starts task agents) come in two
+versions built into the program: *direct* for repos without a `user` (the agent runs `striker start-coordinator` or
+`striker dispatch` itself) and *relayed* for repos with a `user` (the agent writes `requests` into its status file).
+The sources are `striker/internal/lead/coordinators-direct.md`, `coordinators-relayed.md`,
+`striker/internal/coord/agents-direct.md` and `agents-relayed.md`.
+
+Editing a brief changes what new agents are told; running agents keep the brief they got.
+
+## ~/.striker
+
+| Path | Written by | Content |
+| --- | --- | --- |
+| `~/.striker/status/` | local leads and coordinators | status files of agents on this computer |
+| `~/.striker/agents/` | `striker statusline` | one status line file per terminal |
+| `~/.striker/relay.json` | `striker serve` | the relay ledger |
+| `~/.striker/crew.json` | `striker serve` | the crew names handed out |
+| `~/.striker/briefs/` | `striker coordinator` (legacy) | filled coordinator briefs for old plans |
+
+### ~/.striker/status
+
+Status files of leads and coordinators that run on this computer: `<repo>.json` for a lead,
+`<repo>--<change>.json` for a coordinator. Format: [Status file](/docs/reference/status-file). On a remote machine
+the same files live in the machine's `status_dir` from `fleet.json`, and striker reads them through hc.
+
+### ~/.striker/agents
+
+One file per herdr terminal, `<terminal>.json`, written by `striker statusline` (Claude Code's status line command)
+with the terminal id from `HC_TERMINAL_ID`. Each holds one line:
+
+```json
+{"terminal":"t7","at":1795770000000,"claude":{"model":{"display_name":"Opus"},"context_window":{"total_input_tokens":800000,"total_output_tokens":12000,"used_percentage":41}}}
+```
+
+Striker reads the files written within the last day to show each crew member's model, tokens and context use. On a
+remote machine the files are in the machine's `agents_dir` from `fleet.json` (default `~/.striker/agents` of the user
+hc logs in as), written there by `setup/statusline.sh`.
+
+### ~/.striker/relay.json
+
+The ledger of `striker serve`'s relay: everything it carried out for relayed agents. It is the only record of that;
+Striker never writes into status files. Keys are `<machine>|<status file name>|<id>`:
+
+```json
+{
+  "remote1|alpha--add-greeting.json|2-impl-1": {
+    "at": "2026-11-24T09:13:05Z",
+    "outcome": "started remote1/t6",
+    "address": "remote1/t6",
+    "name": "implementer-2",
+    "watch": true,
+    "delivered": false
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `at` | when the request was carried out |
+| `outcome` | `started <address>`, `sent` or `error <reason>` |
+| `address` | the agent started or sent to |
+| `name` | its terminal name (`<role>-<task>`), for task agents |
+| `watch` | Striker watches the agent and tells the requester its result |
+| `delivered` | the watched agent's result has reached the requester |
+| `turn` | the agent's turn whose result was delivered, so it is not delivered twice |
+
+A request with no entry is still open; an `error` names the reason. The file is written to a temporary file and
+renamed, with permissions `600`. If it cannot be parsed, the relay stays off rather than carry anything out twice.
+
+### ~/.striker/crew.json
+
+The Star Trek names the crew list hands out, per terminal address with the terminal's creation time, so an agent
+keeps its name for its whole life and a new terminal at the same address gets a new one.

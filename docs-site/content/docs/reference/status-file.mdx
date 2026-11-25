@@ -1,0 +1,136 @@
+---
+title: Status file
+description: The JSON file in which every lead and coordinator reports to Striker.
+---
+
+Every lead and every coordinator keeps one status file up to date. It is the way back up the command chain: Striker
+reads it instead of asking the agent, the bridge shows it, and relayed agents put their requests into it. The agent
+owns the file; Striker never writes into it.
+
+## Where it lives
+
+| Who | On this computer | On a remote machine |
+| --- | --- | --- |
+| Lead of `<repo>` | `~/.striker/status/<repo>.json` | `<status_dir>/<repo>.json` |
+| Coordinator of `<change>` | `~/.striker/status/<repo>--<change>.json` | `<status_dir>/<repo>--<change>.json` |
+
+`<status_dir>` is the machine's entry in `status_dir` of `fleet.json`. The brief tells each agent its exact path. The
+file name is how Striker tells them apart: a name with `--` belongs to a coordinator, with the change after the `--`.
+
+The lead makes its file readable for everyone (`chmod 664`), the coordinator with `chmod 644`, because on a remote
+machine the agents run as a different user than the one hc reads with.
+
+A file left by an earlier agent is the hand-over: a new lead or coordinator reads it first and keeps `task`,
+`progress`, `needs_you` and `note` (a coordinator at least `needs_you` and `note`).
+
+## Lead fields
+
+Format from `briefs/lead.md` (JSON, UTF-8; a leading BOM is accepted):
+
+```json
+{
+  "repo": "alpha",
+  "updated": "2026-11-24T09:10:00Z",
+  "phase": "implement",
+  "task": "Add a greeting to the README",
+  "progress": { "done": 1, "total": 3 },
+  "needs_you": [
+    { "kind": "abnahme", "text": "Approve the greeting wording?" }
+  ],
+  "note": "Coordinator for add-greeting is running.",
+  "requests": [
+    { "id": "coord-add-greeting-1", "do": "start-coordinator", "change": "add-greeting" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `repo` | the repo's name, as in `fleet.json` |
+| `updated` | time of the last write, ISO 8601 in UTC |
+| `phase` | one of `idle`, `design`, `plan`, `implement`, `review`, `push`, `blocked`, `done` |
+| `task` | what the agent works on, one sentence, or `null` |
+| `progress` | `{ "done": n, "total": m }`, or `null` when there are no countable steps |
+| `needs_you` | what the human has to decide; an empty list when nothing waits |
+| `note` | the latest state in one sentence |
+| `requests` | only for relayed leads (repos with a `user`); left out otherwise |
+
+The lead writes the file once at the start and again whenever task, phase or progress change, when it needs
+something from the human and when it is done.
+
+## Coordinator fields
+
+The coordinator uses the same format plus:
+
+| Field | Meaning |
+| --- | --- |
+| `change` | the OpenSpec change it coordinates |
+| `progress` | `{done, total}` counted from the change's `tasks.md` |
+| `needs_you[].task` | optional: the task id an entry is about (string `"2.3"` or number) |
+| `requests` | only for relayed coordinators; `dispatch` and `send` requests |
+
+```json
+{
+  "repo": "alpha",
+  "change": "add-greeting",
+  "updated": "2026-11-24T09:12:00Z",
+  "phase": "implement",
+  "task": "Task 2: greeting in the README",
+  "progress": { "done": 1, "total": 3 },
+  "needs_you": [
+    { "kind": "frage", "text": "Greeting in English only, or also in German?", "task": "2" }
+  ],
+  "note": "Implementer for task 2 running.",
+  "requests": [
+    { "id": "2-impl-1", "do": "dispatch", "role": "implementer", "task": "2" }
+  ]
+}
+```
+
+An entry with `task` makes the bridge show that task as NEEDS YOU in the PLAN view.
+
+## needs_you kinds
+
+`needs_you` collects everything the agent may not decide itself. Each entry has `kind` and `text` (one sentence:
+what the human should decide). The kinds are German words, because the briefs are German:
+
+| `kind` | Meaning |
+| --- | --- |
+| `antrag` | a request: the agent wants to do something that needs permission |
+| `abnahme` | an acceptance: a result is ready for the human to accept |
+| `frage` | an open question |
+| `recht` | a question of rights (access, permissions) |
+
+Striker gathers these from all status files, puts them to the human, and sends the answer back verbatim with
+`striker send`: `[Striker] Antwort des Menschen: "…"` ("the human's answer: …"). A `[Striker]` message counts as approval only when it quotes the
+human's answer.
+
+## requests
+
+Agents of a repo with a `user` in `fleet.json` run as that user and have no access to hc, so they cannot run
+`striker` themselves. They ask `striker serve` through `requests` instead. Each request is an object with a unique `id`
+chosen by the agent and a `do`:
+
+| `do` | Allowed for | Fields | What Striker does |
+| --- | --- | --- | --- |
+| `start-coordinator` | lead | `change` (kebab-case) | runs `striker start-coordinator <repo> <change>` |
+| `dispatch` | coordinator | `role`, `task` (task id, string or number) | starts task agent `<role>-<task>` under the coordinator |
+| `send` | coordinator | `to` (terminal name such as `implementer-2`), `text` | sends the text to a task agent Striker started for this coordinator |
+
+```json
+{ "id": "2-impl-fix-1", "do": "send", "to": "implementer-2", "text": "Spec review found: …" }
+```
+
+Rules:
+
+- `striker serve` reads status files changed within the last day, every 10 s, on machines with relayed repos.
+- Each `id` is carried out once. The ledger key is `<machine>|<status file name>|<id>`; a new attempt needs a new
+  `id`. Requests without `id` and repeats of an `id` within the file are ignored.
+- An `id` may not contain `|`, line breaks or tabs and is at most 100 characters.
+- A request the role may not make, with missing fields or an unknown `do`, is refused.
+- Striker answers in the requester's terminal: `[Striker] Anfrage <id>: …` ("request `<id>`: …") when done,
+  `[Striker] Anfrage <id> abgelehnt: <reason>` ("request `<id>` refused: `<reason>`") when refused.
+- Done requests may stay in the file or be removed; open ones must be kept when the agent rewrites the file.
+
+What was carried out is recorded only in `~/.striker/relay.json` (see [Files](/docs/reference/files)). The relay
+page explains the whole flow.

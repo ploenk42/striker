@@ -1,0 +1,11 @@
+{
+  "repo": "beta",
+  "updated": "2026-11-24T08:30:00Z",
+  "phase": "idle",
+  "task": null,
+  "progress": null,
+  "needs_you": [
+    { "kind": "antrag", "text": "Add the Briar Patch to the chart list as a new change?" }
+  ],
+  "note": "chart-list is archived; nothing in progress."
+}

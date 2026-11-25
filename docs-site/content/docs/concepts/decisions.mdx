@@ -1,0 +1,67 @@
+---
+title: Decisions
+description: Decisions stay with the human; Striker passes answers on verbatim, never forces and never interrupts.
+---
+
+Striker coordinates many agents, but it decides nothing that belongs to the person. Every rule on this page
+keeps it that way.
+
+## What the human decides
+
+Proposals, approvals, releases and rights belong to the person. In a status file they are the `needs_you`
+kinds:
+
+| `kind` | Meaning | Example |
+| --- | --- | --- |
+| `antrag` | a proposal: may I do this? | "Start the change add-greeting?" |
+| `abnahme` | an approval of finished work | "Approve the greeting wording?" |
+| `frage` | an open question | "Should the greeting be localised?" |
+| `recht` | a right or permission | "May the coordinator install a new dependency?" |
+
+(The kind values are German, as they are written in the briefs and the status files.)
+
+An agent that needs one of these writes it into `needs_you` and waits. It does not guess, and it does not go
+ahead because the decision seems obvious.
+
+## Striker collects, the human answers
+
+Striker reads the `needs_you` lists of all leads and coordinators (and notices agents whose live state is
+`blocked`), and lays them before the person in one bundle. It never guesses what the person would say, and it
+never answers in their place.
+
+When the person answers, Striker passes the answer to the agent that asked, word for word:
+
+```text
+[Striker] Antwort des Menschen: "Yes, use 'Hello, crew'."
+```
+
+("Antwort des Menschen" means "the human's answer".)
+
+## Why verbatim
+
+The briefs tell every lead and coordinator: a `[Striker]` message is not an approval unless it explicitly
+quotes the human's answer. An order like "go ahead" from Striker is therefore not enough to pass an approval
+step; only the person's own words are. This protects the person from Striker misreading a question, summarising
+an answer into something stronger, or deciding by itself, and the agent below can check the decision because
+it sees the actual words.
+
+The same holds for answers that arrive through a terminal: when a task agent waits for input, its
+coordinator either decides (if it is the coordinator's to decide) or puts the question into its own
+`needs_you`, and the person answers in the agent's terminal.
+
+## No `--force`
+
+`hc send` can force a message into a terminal that is waiting on a prompt. Striker never sends anything with
+`--force` to a blocked agent. A blocked agent is waiting for the person; forcing text in would answer for
+them.
+
+## No interrupt
+
+When a lead is `working`, Striker still delivers its message: it waits in the lead's input until the lead is
+free. Striker never uses `hc interrupt` unless the person says so. Interrupting would break off work the lead
+was told to finish, and the brief's first rule tells each lead to finish what it is doing first.
+
+## Agents never push
+
+Coordinators and task agents commit in their worktree, but nobody below the person pushes. Archiving a
+finished change is laid before the person through `needs_you`, and pushing stays with them.

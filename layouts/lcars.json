@@ -1,0 +1,251 @@
+{
+  "id": "root",
+  "type": "column",
+  "children": [
+    {
+      "id": "top",
+      "type": "block",
+      "content": {
+        "mod": "lcars",
+        "props": {
+          "part": "top"
+        }
+      },
+      "size": {
+        "px": 64
+      },
+      "window_drag": true
+    },
+    {
+      "id": "body",
+      "type": "row",
+      "children": [
+        {
+          "id": "sidebar",
+          "type": "block",
+          "content": {
+            "mod": "lcars",
+            "props": {
+              "part": "side"
+            }
+          },
+          "size": {
+            "px": 210
+          }
+        },
+        {
+          "id": "work",
+          "type": "column",
+          "children": [
+            {
+              "id": "tabs",
+              "type": "block",
+              "content": {
+                "mod": "lcars",
+                "props": {
+                  "part": "tabs"
+                }
+              },
+              "size": {
+                "px": 44
+              }
+            },
+            {
+              "id": "work-view",
+              "type": "stack",
+              "children": [
+                {
+                  "id": "main",
+                  "type": "block",
+                  "content": {
+                    "tab": "active",
+                    "pane": {
+                      "background": "#000000",
+                      "border": {
+                        "width": 2,
+                        "color": "#666688"
+                      },
+                      "focus": {
+                        "width": 2,
+                        "color": "#ff9900"
+                      },
+                      "radius": 10,
+                      "gap": 8,
+                      "lone": true
+                    }
+                  }
+                },
+                {
+                  "id": "striker-board",
+                  "type": "column",
+                  "children": [
+                    {
+                      "id": "striker-board-view",
+                      "type": "block",
+                      "content": {
+                        "mod": "lcars",
+                        "props": {
+                          "part": "board"
+                        }
+                      },
+                      "size": {
+                        "weight": 3
+                      }
+                    },
+                    {
+                      "id": "striker-prompt",
+                      "type": "block",
+                      "content": {
+                        "terminal": "t16"
+                      },
+                      "size": {
+                        "px": 300
+                      },
+                      "min": 300,
+                      "background": "#000000",
+                      "border": {
+                        "width": 2,
+                        "color": "#ff9900"
+                      },
+                      "radius": 10,
+                      "padding": 4
+                    }
+                  ],
+                  "gap": 8
+                },
+                {
+                  "id": "bridge",
+                  "type": "column",
+                  "children": [
+                    {
+                      "id": "bridge-view",
+                      "type": "block",
+                      "content": {
+                        "mod": "lcars",
+                        "props": {
+                          "part": "bridge"
+                        }
+                      },
+                      "size": {
+                        "weight": 1
+                      }
+                    },
+                    {
+                      "id": "bridge-field",
+                      "type": "column",
+                      "children": [
+                        {
+                          "id": "bridge-rule",
+                          "type": "block",
+                          "content": {
+                            "mod": "lcars",
+                            "props": {
+                              "part": "bridge-rule"
+                            }
+                          },
+                          "size": {
+                            "px": 44
+                          }
+                        },
+                        {
+                          "id": "bridge-bottom",
+                          "type": "block",
+                          "content": {
+                            "mod": "lcars",
+                            "props": {
+                              "part": "bridge-bottom"
+                            }
+                          },
+                          "size": {
+                            "weight": 1
+                          }
+                        }
+                      ],
+                      "size": {
+                        "px": 190
+                      },
+                      "gap": 4
+                    }
+                  ],
+                  "gap": 8
+                }
+              ],
+              "active": "main"
+            }
+          ],
+          "padding": [
+            8,
+            12
+          ],
+          "gap": 8,
+          "resizable": false
+        }
+      ],
+      "resizable": false
+    },
+    {
+      "id": "bottom",
+      "type": "block",
+      "content": {
+        "mod": "lcars",
+        "props": {
+          "part": "bottom"
+        }
+      },
+      "size": {
+        "px": 60
+      }
+    }
+  ],
+  "background": "#000000",
+  "theme": "graphite",
+  "colors": {
+    "accent": "#ff9900",
+    "accent_foreground": "#000000",
+    "ansi0": "#000000",
+    "ansi1": "#ff5544",
+    "ansi10": "#bbdd88",
+    "ansi11": "#ffdd88",
+    "ansi12": "#99bbff",
+    "ansi13": "#ddaadd",
+    "ansi14": "#bbddff",
+    "ansi15": "#ffffff",
+    "ansi2": "#99cc66",
+    "ansi3": "#ffcc66",
+    "ansi4": "#5599ff",
+    "ansi5": "#cc99cc",
+    "ansi6": "#99ccff",
+    "ansi7": "#ffcc99",
+    "ansi8": "#666688",
+    "ansi9": "#ff7766",
+    "background": "#000000",
+    "blocked": "#ff5544",
+    "border": "#333344",
+    "canvas": "#000000",
+    "chrome": "#000000",
+    "dim": "#b08a6a",
+    "done": "#ffcc66",
+    "foreground": "#ffcc99",
+    "hover": "#ff990022",
+    "idle": "#666688",
+    "input": "#14141f",
+    "muted": "#cc9966",
+    "popover": "#0a0a12",
+    "raised": "#14141f",
+    "selected": "#ff990033",
+    "selection": "#5a3a00",
+    "solid": "#ff9900",
+    "solid_foreground": "#000000",
+    "surface": "#000000",
+    "unknown": "#666688",
+    "working": "#99ccff"
+  },
+  "font": "Victor Mono",
+  "ui_font": "Antonio",
+  "titlebar": "none",
+  "traffic_lights": [
+    226,
+    34
+  ],
+  "preview": "mods/lcars/preview.png"
+}

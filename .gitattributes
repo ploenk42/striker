@@ -1,0 +1,2 @@
+# Herdr writes layouts back with LF (layout.set); keep the repo copies the same so a swap back is byte-identical
+layouts/*.json text eol=lf

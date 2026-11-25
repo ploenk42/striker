@@ -1,0 +1,4 @@
+{
+  "title": "Setup",
+  "pages": ["prerequisites", "install", "fleet", "remote-machine", "first-lead"]
+}

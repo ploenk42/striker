@@ -1,0 +1,75 @@
+---
+title: Labels
+description: The striker.* hc labels, who sets them and who reads them.
+---
+
+Striker finds its agents through hc labels on their terminals, not through names, spaces or folders: a label stays
+with the terminal wherever it runs and whatever its working directory. A label is a `key=value` pair, set with
+`hc label <addr> <key>=<value>` or with `--label` when a terminal is started.
+
+| Label | Carried by | Set by | Read by |
+| --- | --- | --- | --- |
+| `striker.self` | Striker's own Claude | the person, by hand | crew list, LCARS sidebar |
+| `striker.lead=<repo>` | the lead of `<repo>` | `striker start-lead`, or by hand | `striker status`, `start-lead`, `start-coordinator`, relay, crew, bridge |
+| `striker.coordinator=<change>` | a coordinator | `striker start-coordinator`, `striker coordinator` | `striker status`, `start-coordinator`, relay, bridge, crew |
+| `striker.repo=<repo>` | coordinators and task agents | `striker start-coordinator`, `striker coordinator`, `striker dispatch` | `striker status`, relay, bridge, crew |
+| `striker.task=<id>` | a task agent | `striker dispatch`, relay | bridge (PLAN, REPO) |
+| `striker.role=<role>` | a task agent | `striker dispatch`, relay | bridge, crew |
+| `striker.topic=<change>` | a task agent | `striker dispatch`, relay | bridge (PLAN, REPO) |
+
+## striker.self
+
+Marks the Claude that is Striker. Any non-empty value works (`striker.self=1`). With it, Striker can live in any space,
+for example as the lead of its own repo, and still be named STRIKER in the crew list. Without it, the Claude in the
+space `STRIKER` on this computer counts as Striker.
+
+```text
+hc label t16 striker.self=1
+```
+
+## striker.lead
+
+`striker.lead=<repo>` marks the lead of a repo. `striker start-lead` sets it and refuses to start a second lead for a repo
+that already has a terminal with it. An existing Claude becomes a lead when the label is set by hand and the brief is
+sent:
+
+```text
+hc label t3 striker.lead=alpha
+```
+
+Leads on this computer that are not in `fleet.json` are found only by this label: `striker status` lists them with
+their working directory as path and `~/.striker/status/<repo>.json` as status file. The relay uses it to find the lead
+it answers; the crew list ranks its carrier LCDR.
+
+## striker.coordinator and striker.repo
+
+A coordinator carries both: `striker.coordinator=<change>` and `striker.repo=<repo>`. `striker start-coordinator` sets
+`striker.repo` first, so a terminal with only `striker.coordinator` is never one it made; it refuses to start when the
+change already has a coordinator for the repo, or when a coordinator for the change without `striker.repo` runs on the
+same machine.
+
+From the pair, `striker status` builds the coordinator's status file name (`<repo>--<change>.json`) and lists it under
+its repo; the relay finds the coordinator to answer; the bridge shows it in the repo's PLAN view; the crew list ranks it LT.
+
+Task agents carry `striker.repo` too, so the bridge finds them even when hc reports a home directory as their working
+directory.
+
+## striker.task, striker.role, striker.topic
+
+Every task agent started by `striker dispatch` (or by the relay for a relayed coordinator) carries:
+
+- `striker.task=<id>`: the task id from `tasks.md` (`2.3`); for legacy plans the GitHub issue number;
+- `striker.role=<role>`: `implementer`, `spec-reviewer`, `quality-reviewer` or another role;
+- `striker.topic=<change>`: the change (legacy: the plan's topic).
+
+The bridge uses them to put each agent on its task card (WORKING) and on the REPO tree. The crew list takes the role
+for the rank: LTJG for reviewers, ENS for other roles.
+
+```json
+["run", "--bg", "--name", "implementer-2", "--cwd", "/srv/repos/alpha-add-greeting",
+ "--label", "striker.task=2", "--label", "striker.role=implementer",
+ "--label", "striker.topic=add-greeting", "--label", "striker.repo=alpha",
+ "claude", "Du bist der implementer für Task 2 …"]
+```
+
+That is what `striker dispatch implementer 2 --plan add-greeting --dry-run` prints (shortened).

@@ -1,0 +1,175 @@
+---
+title: Relay
+description: How striker serve does the hc work for agents that run without hc.
+---
+
+Leads and coordinators of a repo with a `user` in `fleet.json` (the demo's `beta` on `remote1`, run as
+`awayteam`) are **relayed**: they have no access to hc, so they cannot call `striker` or `hc` themselves (see
+[Security](/docs/security)). `striker serve`, which runs anyway, does that work for them. Repos without a `user`
+are **direct**: their agents call `striker start-coordinator`, `striker dispatch`, `hc wait` and `hc read`
+themselves, and nothing on this page applies to them.
+
+## The round trip
+
+<Mermaid
+  wide
+  chart={`sequenceDiagram
+  participant L as Lead (awayteam)
+  participant S as Status file
+  participant R as striker serve
+  participant H as hc
+  participant C as Coordinator (awayteam)
+  participant T as Task agent (awayteam)
+  L->>S: requests: start-coordinator, id c-add-farewell-1
+  loop every 10 s
+    R->>H: find status files changed within a day, hc file read
+    H-->>R: requests
+  end
+  R->>R: check kind and role, ledger key machine|file|id
+  R->>H: start coordinator as awayteam in the change worktree
+  H->>C: sudo -u awayteam claude, coordinator brief
+  R->>L: [Striker] Anfrage c-add-farewell-1: Koordinator ... läuft als ...<br/>(request c-add-farewell-1: coordinator ... runs as ...)
+  C->>S: requests: dispatch implementer, task 2, id 2-impl-1
+  R->>H: hc run --parent coordinator, sudo -u awayteam claude
+  H->>T: task prompt from tasks.md and plan.md
+  R->>C: [Striker] Anfrage 2-impl-1: implementer-2 läuft als ...<br/>(request 2-impl-1: implementer-2 runs as ...)
+  loop until done, blocked or gone
+    R->>H: hc wait task agent
+  end
+  R->>H: hc read --lines 200
+  R->>C: [Striker] implementer-2 (...) ist fertig. Seine letzte Antwort: ...<br/>(implementer-2 (...) is done. Its last answer: ...)
+  Note over R,C: a refused request gets [Striker] Anfrage id abgelehnt: reason<br/>(request id refused: reason)`}
+/>
+
+Striker's messages are German, as in the code; the diagram and the tables below give the English beside them.
+
+## Requests
+
+A relayed agent asks by adding entries to `requests` in its own status file: `<status_dir>/<repo>.json` for
+the lead, `<status_dir>/<repo>--<change>.json` for a coordinator. The rest of the file stays as it is.
+
+```json
+"requests": [
+  { "id": "c-add-farewell-1", "do": "start-coordinator", "change": "add-farewell" },
+  { "id": "2-impl-1", "do": "dispatch", "role": "implementer", "task": "2" },
+  { "id": "2-impl-fix-1", "do": "send", "to": "implementer-2", "text": "Spec review found: ..." }
+]
+```
+
+| Kind | Who | Fields | What Striker does |
+|---|---|---|---|
+| `start-coordinator` | lead | `change` | the same as `striker start-coordinator <repo> <change>`: worktree from the change's `x-branch`, space `<repo>-<change>`, tab `coord <change>`, the relayed coordinator brief |
+| `dispatch` | coordinator | `role`, `task` | reads the change from the coordinator's worktree, finds the task, builds the prompt from `tasks.md` and `plan.md` and starts the task agent `<role>-<task>` as a sub-agent of the coordinator |
+| `send` | coordinator | `to`, `text` | passes `text` to the task agent `to` (its terminal name `<role>-<task>`), for fix rounds after a review; only to an agent Striker started for this coordinator |
+
+`role` is any lowercase name (`implementer`, `spec-reviewer`, `quality-reviewer`, …); `task` is a task id of
+the coordinator's own change and may be written as a number (`2`, `2.3`). A task agent started by the relay runs
+as:
+
+```text
+hc run --on <machine> --bg --name <role>-<task> --parent <coordinator> --label striker.task=… --label striker.role=… --label striker.topic=… --label striker.repo=… --
+  sudo --preserve-env=HC_TERMINAL_ID -u awayteam -H sh -lc 'cd "$1" && shift && exec "$HOME/.local/bin/claude" "$@"' sh <worktree> <prompt>
+```
+
+`--parent` places it under the coordinator in the sidebar and ends it with the coordinator.
+
+## Ids and the ledger
+
+- The agent chooses each `id`, unique within its file. A new attempt gets a new id.
+- Striker carries out each id once. Requests it has done may stay in the file or be removed; Striker ignores them
+  either way. A request without an id is ignored, and a repeated id within one file counts only the first time.
+- Striker never writes into the status file. What it did is in its own ledger, `~/.striker/relay.json` on this
+  computer, keyed `<machine>|<status file>|<id>`:
+
+```json
+{
+  "remote1|beta--add-farewell.json|2-impl-1": {
+    "at": "2026-11-24T10:15:02+01:00",
+    "outcome": "started remote1/t2a",
+    "address": "remote1/t2a",
+    "name": "implementer-2",
+    "watch": true,
+    "delivered": true,
+    "turn": 1
+  }
+}
+```
+
+`outcome` is `started <address>`, `sent` or `error <reason>`. `watch` means Striker watches the agent and tells
+the coordinator its result; `delivered` that the result arrived; `turn` which of the agent's turns was
+delivered. The ledger is written after every request (to a temporary file, then renamed), so a restart of
+`striker serve` neither repeats a request nor loses a watch: the watches resume from the ledger. A request
+without an entry is still open; an `error` entry names the reason.
+
+Errors are answered, never retried silently. The agent decides whether to try again with a new id.
+
+## Answers
+
+Striker answers the requester in its terminal, with `striker send` semantics (quotes intact), always beginning
+`[Striker]`. It finds the requester by its labels on its machine: `striker.lead=<repo>`, or
+`striker.coordinator=<change>` with `striker.repo=<repo>`. If the requester is gone, the answer is only in the
+ledger. The texts are German, as in the code, with the English beside them:
+
+| Case | Message | English |
+|---|---|---|
+| coordinator started | `[Striker] Anfrage <id>: Koordinator für <change> läuft als <address>.` | request `<id>`: coordinator for `<change>` runs as `<address>`. |
+| task agent started | `[Striker] Anfrage <id>: <role>-<task> läuft als <address>.` | request `<id>`: `<role>-<task>` runs as `<address>`. |
+| text sent | `[Striker] Anfrage <id>: an <name> (<address>) geschickt.` | request `<id>`: sent to `<name>` (`<address>`). |
+| refused or failed | `[Striker] Anfrage <id> abgelehnt: <reason>.` | request `<id>` refused: `<reason>`. |
+
+Reasons for a refusal, from the checks before Striker acts:
+
+- `start-coordinator darf nur der Lead anfragen` (only the lead may ask for start-coordinator),
+  `dispatch darf nur ein Koordinator anfragen` (only a coordinator may ask for dispatch),
+  `send darf nur ein Koordinator anfragen` (only a coordinator may ask for send)
+- `unbekannte Anfrage "<do>"` (unknown request), `ungültige id "<id>"` (invalid id),
+  `ungültiger Change-Name "<change>"` (invalid change name), `ungültige Rolle "<role>"` (invalid role),
+  `dispatch ohne task` (dispatch without task), `send ohne to` (send without to), `send ohne text` (send
+  without text)
+- `ungültiger Change-Name "<change>" im Dateinamen` (invalid change name in the file name: a coordinator's
+  status file whose name holds no valid change)
+
+and from carrying it out, for example:
+
+- `kein laufender Koordinator für <change> von <repo> auf <machine>` (no running coordinator for `<change>` of
+  `<repo>` on `<machine>`)
+- `kein aktiver Change <change> im Worktree <worktree>` (no active change `<change>` in worktree `<worktree>`)
+- `kein Task <task> im Change <change>` (no task `<task>` in change `<change>`)
+- `<name> hat Striker nicht für diesen Koordinator gestartet` (Striker did not start `<name>` for this
+  coordinator)
+- `hc run scheiterte: …` (hc run failed: …)
+
+A status file that belongs to no relayed fleet repo gets a ledger entry
+(`kein weitergeleitetes Fleet-Repo <repo> auf <machine>`, "no relayed fleet repo `<repo>` on `<machine>`") but
+no answer: whoever wrote it is no agent Striker
+relays for.
+
+## Watching task agents
+
+For every task agent it started or sent text to, `striker serve` runs `hc wait <address> --timeout 600 --json`
+in a loop. When the wait ends, it reads the screen with 200 lines of history (`hc read <address> --lines 200`)
+and tells the coordinator:
+
+| Agent | Message to the coordinator | English |
+|---|---|---|
+| done | `[Striker] <name> (<address>) ist fertig. Seine letzte Antwort: <last answer>` | `<name>` (`<address>`) is done. Its last answer: … |
+| blocked (waits for input, e.g. a dialog) | `[Striker] <name> (<address>) wartet auf eine Eingabe: <last screen lines>` | `<name>` (`<address>`) waits for input: … |
+| gone (terminal ended) | `[Striker] <name> (<address>) ist beendet (exit <code>).`, or `ist beendet.` if hc reports the terminal not found | `<name>` (`<address>`) has ended (exit `<code>`), or "has ended." |
+| no new turn 30 min after a `send` | `[Striker] <name> (<address>) hat seit der letzten Nachricht keinen neuen Turn begonnen; vielleicht kam sie nicht an. Striker beobachtet weiter.` | `<name>` (`<address>`) has not started a new turn since the last message; maybe it did not arrive. Striker keeps watching. |
+
+- **Last answer:** the text after the agent's last `●` answer marker up to the end of the answer (a `✻` status
+  line, a `────` rule or a `❯` prompt), at most 40 lines. If the marker has scrolled out, the text before the
+  last `✻` line. If the screen shows neither a `●` nor a `✻` line, the coordinator gets its last 20 non-blank
+  lines instead. Claude's diff panel (a right column in a wide terminal) is cut off. The briefs ask task agents
+  to end with a one-paragraph summary, so this is usually it; the coordinator reads details itself in the
+  worktree, which it may as the same user.
+- **Blocked:** at most the last 20 non-blank lines, once per blockade; the next message about a blockade comes
+  only after the agent was seen in another state. The coordinator decides, or puts it into its `needs_you` for
+  the human, who answers in the agent's terminal.
+- **After a `send`:** `hc wait` answers a done agent at once with its current turn. Striker waits until the turn
+  is higher than the one it delivered, then delivers the new answer.
+- **Lost connection:** only hc's own word that the terminal does not exist ends a watch. A lost connection to
+  the machine or a timeout of the call is waited out.
+- **Coordinator gone:** if the coordinator cannot be found when the result is due, nobody is left to tell. The
+  watch ends silently and the ledger entry gets `"watch": false` (with `"delivered": false`), so it is not
+  watched again.

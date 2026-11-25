@@ -1,0 +1,117 @@
+---
+title: Fleet Operations
+description: Striker's board, with one column per repo, shows who works, who asks you, and where a click takes you.
+---
+
+Fleet Operations is Striker's board inside the LCARS frame. It has one column for each repo of the fleet, and
+it shows what you would otherwise ask Striker for: which lead is working, what each lead and coordinator is on,
+and what waits on you.
+
+![Fleet Operations with the demo fleet: alpha and beta, each with its lead waiting on you, alpha with its coordinator. A third column (Striker's own repo) is covered.](/shots/fleet-operations.png)
+
+## Opening it
+
+- The **STRIKER** button in the sidebar switches between the board and the terminals. Its colour already tells you
+  something: red and pulsing while a repo needs you (`02 NEED YOU`), gold otherwise (`02 REPOS`), orange while the
+  board is shown (it then reads **TERMINALS**).
+- The **STRIKER** count in the status row at the bottom (`01 STRIKER`) opens the board as well. It counts the repos
+  that need you.
+
+The board is drawn in the work view, the same place that otherwise shows the space's terminals. Nothing in the
+fleet stops or restarts when you switch.
+
+## Where the data comes from
+
+The board reads `http://127.0.0.1:7522/status`, the same answer Striker reads, from
+[`striker serve`](/docs/setup/install). The sidebar asks every 20 seconds and keeps the answer in shared state, so the
+board, the STRIKER button and the status row always show the same thing. Striker's `/crew` answer adds the crew names
+(see below). The live state of a lead or coordinator comes straight from Herdr and wins over the polled one,
+because it is instant.
+
+## The header
+
+| Part | Means | Click |
+| --- | --- | --- |
+| `STRIKER · FLEET OPERATIONS` | The board's title on the orange frame | – |
+| `SCAN <stardate>` | When `striker serve` last scanned the fleet. `· STALE` when that scan is more than a minute old or the last ask failed | – |
+| **TALK TO STRIKER** | Striker's prompt | Gives the keyboard to Striker's prompt under the board (or, from elsewhere, goes to Striker's own pane) |
+| **TERMINALS** | Back to the terminals | Leaves the board |
+
+A stardate is the local clock as one number, `YYYYMMDD.hhmmss`: `20261124.143012` is 24 November 2026,
+14:30:12. When `striker serve` does not answer, a red line under the header says why (`SCAN FAILED: STRIKER SERVE NOT
+RUNNING`), and the board keeps showing the last good scan.
+
+## A column
+
+Each column belongs to one repo from [`fleet.json`](/docs/setup/fleet), plus any local lead that Striker found by its
+`striker.lead` label. From top to bottom:
+
+### Head
+
+A block in the colour of the repo's state, with the repo's name in large letters and a small line above it:
+
+- **who asks you**, when someone does: `LCDR PATA · NEEDS YOU` for the lead, or
+  `LT WERF · ADD-GREETING · NEEDS YOU` when a coordinator asks (`· +1` when more than one does);
+- otherwise the lead and its state: `LCDR PATA · WORKING`; `NO LEAD` when the repo has none. A repo without a
+  lead whose status file still holds `needs_you` entries reads `LEAD · NEEDS YOU` instead.
+
+The colour follows the [LCARS rule](#colours): red and blinking when the lead or one of its coordinators needs
+you, gold when the lead's phase is `done` (the word then reads `COMPLETE`), blue while it works, gray when it is
+idle or unknown.
+
+**Click:** the head goes to whoever asks you (the lead, else the first asking coordinator), otherwise to the
+lead. A head with neither (no lead, no asking coordinator) does nothing.
+
+### Body
+
+The body scrolls when a repo has more to say than the column is tall. It holds, in this order:
+
+1. **What waits on you:** one line for each `needs_you` entry in the lead's status file, with a red tag for its
+   kind (`ANTRAG`, `ABNAHME`, `FRAGE`, `RECHT`; any other kind in capitals, `FRAGE` when none is given) and the
+   text. A click goes to the lead, when there is one.
+2. **PHASE:** a row of five cells, DESIGN, PLAN, BUILD, REVIEW, PUSH. The current phase is orange, the ones before
+   it tan, the rest dark. It is hidden while the lead is idle or done.
+3. **TASK:** what the lead says it is on (`NO TASK` when it says nothing).
+4. **PROGRESS:** a segmented bar with `done/total`, when the status file gives a progress.
+5. **STATUS:** the lead's last note.
+
+`NO STATUS FILE YET` means the lead runs but has not written its [status file](/docs/reference/status-file) yet;
+`STATUS: …` in red means the file could not be read.
+
+### Lead line
+
+Under the body: a strip in the lead's state colour, `LCDR PATA · WORKING`, and under it the lead's terminal
+address, its last message and how long ago its status file was updated (`UPDATED 3 MIN AGO`). **Click:** goes to
+the lead's terminal. A repo without a lead shows a gray block `NO LEAD · ASK STRIKER` instead: you start one through
+Striker ([First lead](/docs/setup/first-lead)).
+
+### Coordinator lines
+
+One line for each coordinator of the repo, one per change: `LT WERF · ADD-GREETING · WORKING`, and under it
+its terminal address, its worktree folder, its task and when it last updated its status file. What a coordinator
+asks you is listed under its line, with the same red kind tags. **Click:** on the line or on one of its questions,
+goes to the coordinator's terminal.
+
+A coordinator whose status file cannot be read stays listed, with the error, but never in red: red means that
+someone needs you, not that a file is broken.
+
+### Crew names
+
+The names come from Striker's `/crew` answer: every agent gets a rank and a name (`LCDR PATA`, `LT WERF`), so
+you can tell them apart at a glance. When every name of both lists is taken, an agent is called `CREWMAN <n>`
+(as the coordinator `LT CREWMAN 1` in the shot). The same names appear in the sidebar's CREW list. Until Striker has named an
+agent, its line falls back to `LEAD` or `COORD <change>`.
+
+## Colours
+
+The board adds no colours of its own. Status colours mean one thing each:
+
+| Colour | Means |
+| --- | --- |
+| Red, blinking | Waits on you: a `needs_you` entry, or a lead or coordinator whose terminal is blocked |
+| Blue | Working |
+| Gold | Finished |
+| Gray | Nothing to report: idle, no lead, zero |
+| Orange, tan, peach | Frame and labels only, never a status |
+
+The full table is in `docs/lcars-colors.md` in the repository.

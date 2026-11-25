@@ -1,0 +1,100 @@
+---
+title: OpenSpec workflow
+description: From a change to its tasks and plan, a worktree, a coordinator and task agents, to merge and archive.
+---
+
+Work in a Striker repo is organised as [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes. OpenSpec is
+the storage: requirements, designs, tasks and plans as Markdown in the repo. The process is the Superpowers
+skills for Claude Code (brainstorming, planning, test-driven development, subagents, reviews). The `openspec`
+CLI is used only for `validate`, `list` and `archive`.
+
+The rules live in the repo's `AGENTS.md`, in a section "Arbeitsweise: OpenSpec + Superpowers" ("way of
+working"); the lead brief points every lead to it.
+
+## Layout
+
+```text
+openspec/
+  specs/<capability>/spec.md            living requirements (SHALL + scenarios)
+  changes/<name>/
+    .openspec.yaml                      metadata (x-depends_on, x-branch)
+    proposal.md                         why, what changes, capabilities, impact
+    design.md                           the design
+    specs/<capability>/spec.md          spec deltas (ADDED / MODIFIED / REMOVED)
+    tasks.md                            checklist = state of the change
+    plan.md                             the detailed plan (steps, files, tests)
+  changes/archive/<YYYY-MM-DD>-<name>/  finished changes
+```
+
+## From idea to plan
+
+1. **Brainstorming** writes `proposal.md` (short) and `design.md`, plus spec deltas under `specs/` for every
+   capability whose behaviour changes.
+2. **Planning** writes `tasks.md`, one line per task, and `plan.md`, the detailed plan with one section
+   `### Task <id>: <title>` per task.
+
+The lead does both, usually together with the person, and commits the change to the default branch. The
+person decides when it is ready to be carried out.
+
+### Task lines
+
+Only top-level lines in `tasks.md` count as tasks:
+
+```markdown
+- [x] 1 Greeting skeleton
+- [ ] 2 Greeting command (after 1)
+- [ ] 3 Greeting docs (after 1)
+```
+
+A task without `after` depends on the task before it. Tasks whose `after` tasks are all ticked may run in
+parallel; tasks 2 and 3 above start together once task 1 is done.
+
+### Metadata
+
+`.openspec.yaml` holds Striker's metadata with an `x-` prefix:
+
+```yaml
+schema: spec-driven
+x-depends_on: [add-config]
+x-branch: add-greeting
+```
+
+`x-depends_on` names changes that must be archived first; `x-branch` names the branch the work happens on
+(default: the change name).
+
+## Worktree and coordinator
+
+`striker start-coordinator <repo> <change>` reads `x-branch`, creates a git worktree for that branch next to the
+repo if it does not exist yet, and starts the coordinator in it (see [Roles](/docs/concepts/roles)). The work
+and the ticks live on that branch, and its `tasks.md` is the one that counts. Several changes can run at
+the same time, each in its own worktree with its own coordinator.
+
+## Task agents and review roles
+
+For each task, the coordinator follows the pattern of Superpowers' subagent-driven development, but every
+agent is its own labelled terminal:
+
+1. an **implementer** does the task's steps from `plan.md`, with tests where the plan asks for them, and
+   commits;
+2. a **spec reviewer** checks the result against the plan, the design and the spec deltas;
+3. a **quality reviewer** checks the code itself.
+
+If a review finds something, the coordinator sends the finding back to the implementer for a fix round, then
+reviews again. The coordinator decides what it can; everything else goes into its `needs_you`.
+
+Commits name their task (`Task <id>: …`). A task is ticked in `tasks.md` (`- [x]`), and its steps in
+`plan.md`, in the same commit that contains its last piece of work, so the branch always shows exactly what
+is done. `progress` in the coordinator's status file is `done` / `total` from `tasks.md`.
+
+## Merge, validate, archive
+
+When all tasks are done, the branch is merged to the default branch. Then:
+
+```text
+openspec validate <change> --strict
+openspec archive <change> --yes
+```
+
+`validate` checks the change's structure and spec deltas; `archive` applies the deltas to
+`openspec/specs/` and moves the change to `changes/archive/<date>-<change>/`. The coordinator validates and
+then lays the archiving before the person in its `needs_you`; it runs on the default branch after the merge.

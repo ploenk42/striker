@@ -1,0 +1,194 @@
+---
+title: Security
+description: Where the trust boundaries run, and the rules that hold them.
+---
+
+Striker gives Claude Code agents real work on real machines. This page shows where the boundaries between them
+run and which rules keep each agent inside its own. The examples use the demo fleet: this computer, a second
+machine `remote1`, and the fleet user `awayteam` there.
+
+## Trust boundaries
+
+<Mermaid
+  wide
+  chart={`flowchart LR
+  subgraph local["This computer, as the person"]
+    human(["Human"])
+    striker["Striker (Claude Code)"]
+    serve["striker serve"]
+    hcl["hc client"]
+    herdr["Herdr"]
+    human --> striker
+    striker --> hcl
+    serve --> hcl
+    herdr --- hcl
+  end
+  subgraph remote["Remote machine remote1"]
+    subgraph owner["as the person"]
+      hcs["hc server"]
+      sudo["sudo -u awayteam (nothing else)"]
+    end
+    subgraph agent["as awayteam"]
+      lead["Lead"]
+      coord["Coordinator"]
+      tasks["Task agents"]
+      wt[("repo and worktrees")]
+      status[("status files")]
+    end
+  end
+  hcl -- "hc run / striker send" --> hcs
+  hcs --> sudo
+  sudo -- "start, send" --> lead
+  sudo -- "start, send" --> coord
+  sudo -- "start, send" --> tasks
+  lead --> wt
+  coord --> wt
+  tasks --> wt
+  lead -- "writes its own" --> status
+  coord -- "writes its own" --> status
+  status -. "hc file read, every 10 s" .-> hcs
+  hcs -. "requests" .-> serve`}
+/>
+
+The line between the person and `awayteam` is crossed in these ways only:
+
+- **Down, agents:** Striker or `striker serve` asks hc to start or write to a terminal; on the remote machine hc
+  runs the command as the person, and the command is `sudo … -u awayteam … claude …`.
+- **Down, git and files:** to start a coordinator or a task agent, Striker also runs fixed commands as
+  `awayteam` through `hc exec`: `sudo -n -u awayteam -i git -C <repo> …` (create the change's worktree, read
+  branches) and `sudo -n -u awayteam -i cat <file>` (read the change's OpenSpec files in the worktree).
+  `-n` makes sudo fail instead of asking for a password. The commands and their arguments come from Striker's
+  code and `fleet.json`, never from an agent.
+- **Up:** an agent writes its own status file; `striker serve` reads it over hc. Nothing else an agent writes
+  reaches the person's account, apart from what Striker reads in the worktree as above (OpenSpec files, which
+  become task prompts).
+
+## The rules
+
+### Only the person's account talks to hc
+
+hc is the remote control for every terminal on a machine: whoever can reach its socket can start, read and type
+into any of them, as the person. So hc runs only under the person's account, on this computer and on the remote
+machine, and no agent account gets access to the socket. Agents running as `awayteam` cannot call `hc` or
+`striker`.
+
+### Agents on a remote machine run as a separate user (`awayteam`), not as root
+
+A lead, a coordinator and every task agent on a remote machine run as a separate user. The repo entry in
+`fleet.json` names it (`"user": "awayteam"`), and Striker starts Claude through `sudo`. For a lead or
+coordinator the argv is:
+
+```text
+sudo  --preserve-env=HC_TERMINAL_ID  -u awayteam  -i  sh  -c  <script>
+```
+
+with `<script>` as one argument (the directory and the name are put in single quotes inside it):
+
+```sh
+cd '<dir>' && exec "$HOME/.local/bin/claude" --remote-control '<name>'
+```
+
+For a task agent:
+
+```text
+# task agent (directory and prompt are arguments, not part of the script)
+sudo --preserve-env=HC_TERMINAL_ID -u awayteam -H sh -lc 'cd "$1" && shift && exec "$HOME/.local/bin/claude" "$@"' sh <worktree> <prompt>
+```
+
+`--remote-control '<name>'` is appended only when the name is plain text (letters, digits, spaces, `.`, `_`,
+`-`), so it is safe inside the single quotes; otherwise the lead or coordinator starts without Remote Control.
+Task agents never get it.
+
+The setup script (`striker/setup/awayteam.sh`, run once as root on the remote machine) writes a sudoers rule
+that lets the person become `awayteam` without a password, and nothing more:
+
+```text
+<person> ALL=(awayteam) NOPASSWD: ALL
+```
+
+`awayteam` is not in the `sudo` group and has no sudoers rule of its own, so sudo does not let it become root
+or the person. It gets write access (ACLs) to the fleet repos and their worktrees, and to the shared status and
+status-line folders. **Why:** an agent that goes wrong can damage the repos it works in, but not the person's
+files or the hc socket. `--preserve-env=HC_TERMINAL_ID` only carries the terminal id across, so the agent's
+status line can name its terminal.
+
+**One exception: Docker.** If the machine has a `docker` group, the setup script adds `awayteam` to it, so
+leads can run Docker Compose. Membership in `docker` is as good as root: anyone in it can start a container
+that mounts the host's file system. On such a machine the separate user protects the person's account only
+against mistakes, not against an agent set on getting root. Remove the `usermod -aG docker` line from the
+script if your agents do not need Docker.
+
+**Not root.** `fleet.json` also accepts `"user": "root"`; Striker then starts the agents with `sudo -i` as root,
+and the relay still serves them (it only checks that a `user` is set). Use a separate user like `awayteam`:
+with root, the boundary described here does not exist.
+
+### Agents without hc ask through their own status file
+
+An agent that cannot run `hc` still has to start coordinators and task agents. It does so by adding an entry to
+`requests` in its own status file; `striker serve` reads the file every 10 seconds and carries the request out
+(details on the [Relay](/docs/relay) page). What it may ask for is fixed by its role:
+
+| Requester | Status file | May ask for |
+|---|---|---|
+| Lead | `<repo>.json` | `start-coordinator` for a change of its own repo |
+| Coordinator | `<repo>--<change>.json` | `dispatch` of a task agent for a task of its own change; `send` to a task agent Striker started for this coordinator |
+
+Striker checks every request before it acts:
+
+- the file belongs to a fleet repo with a `user` on that machine, and a coordinator's file names a valid change;
+- the kind is allowed for the role (otherwise, for example, `start-coordinator darf nur der Lead anfragen`, "only the lead may ask for start-coordinator");
+- change names and roles match fixed patterns, a `dispatch` has a task, a `send` has `to` and `text`;
+- `send` goes only to a terminal that the ledger shows Striker started for the same status file.
+
+Each request id is carried out once. The ledger `~/.striker/relay.json` on this computer records it under the key
+`<machine>|<status file>|<id>`, and a key that is already there is never carried out again, not even after a
+restart of `striker serve`. Striker never writes into an agent's status file.
+
+**Why:** no request runs a command of the agent's choosing, names another repo, machine or user, or reaches a
+terminal Striker did not start for it. The prompt of a task agent is built by Striker from the change's
+`tasks.md` and `plan.md`, not taken from the request. The agent owns its status file and Striker owns the
+ledger, so there are never two writers to one file.
+
+### Decisions belong to the human
+
+Requests for approval, acceptance of work, releases and questions of rights are collected from the status files
+(`needs_you`) and from blocked agents, and put to the human. Striker passes the answer on verbatim:
+
+```text
+[Striker] Antwort des Menschen: "…"
+```
+
+("Antwort des Menschen" means "the human's answer".)
+
+A message beginning `[Striker]` counts as the human's approval only when it quotes the human's answer. Striker
+never guesses what the human would say. **Why:** Striker is itself an agent; if it could approve, every boundary
+above would end at whatever it was persuaded to believe.
+
+### Agents never push, and nobody interrupts a working agent
+
+Coordinators and task agents commit in their worktrees, but none of them pushes; publishing work is the
+human's decision. Striker delivers a message to a working agent and lets it wait in the agent's input; it never
+interrupts (`hc interrupt`) unless the human says so, and never forces text into a blocked agent
+(`--force`). **Why:** an interrupted agent may leave half-done work, and a blocked agent is usually waiting for
+exactly the decision that belongs to the human.
+
+### Shell commands stay simple
+
+Agents run one simple command per shell call with absolute paths: no `$(...)`, backticks, variables, loops,
+heredocs, pipes, redirects or chains with `;`, `&&` and `||`. Files are read and changed with Claude's file
+tools. **Why:** the person's Claude permission settings allow or deny commands by their text. A plain command
+can be matched and reviewed; a pipeline or substitution can hide a second command inside an allowed one.
+
+## What this does not protect against
+
+- **An agent in the `docker` group.** On a machine where `awayteam` is in `docker` (see above), an agent can
+  reach root through a container, and with root the person's account and the hc socket on that machine.
+- **A repo with `"user": "root"`.** Its agents run as root: nothing on that machine is out of their reach,
+  including the person's account and the hc socket. The request checks of the relay still apply, but an agent
+  with root does not need the relay.
+- **A compromised account of the person.** Whoever controls the person's account controls hc, Striker,
+  `striker serve` and the sudo rule, and with them every agent on every machine.
+- **A repo that tricks an agent within its own rights.** An agent reads the repo it works in. Content written to
+  mislead it (in code, docs or issues) can make it do anything its account may do in that repo: change files,
+  commit, write requests of its allowed kinds. The boundaries limit where the damage can go, not whether it
+  happens; review what agents commit before it leaves the machine.

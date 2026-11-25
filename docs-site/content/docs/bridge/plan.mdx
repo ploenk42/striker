@@ -1,0 +1,111 @@
+---
+title: PLAN
+description: A change's tasks on the orange elbow, with WORKING, NEEDS YOU and DONE cards on each task's row.
+---
+
+The Bridge is one LCARS view per Herdr space, and a space is one worktree. It shows the change that is being
+built in that worktree, with the data from `striker serve`. Three pseudo-tabs at the left of the tab bar switch
+its mode: **OVERVIEW**, **PLAN** and **SPEC**. The shown one is orange, the others peach. A click on one of
+the space's real tabs leaves the Bridge and shows that terminal again.
+
+In a linked worktree (a change's `x-branch`), the Bridge opens on PLAN. On the main checkout it opens on
+[OVERVIEW](#overview-the-repo-one-level-up).
+
+![PLAN of the demo change add-greeting: tasks 1 and 2 done, task 3 open with its steps and the step it is on](/shots/plan.png)
+
+## The elbow and its rows
+
+PLAN draws the change's [`tasks.md`](/docs/concepts/openspec-workflow) as an orange LCARS elbow. The arm at the top
+carries the change's title; under it there is one row per task, separated by thin darker lines.
+
+A row shows:
+
+- an **oval** for the task's state: blue working, red blinking when it needs you, gold done, gray interrupted, and
+  orange with a black outline for a task nobody has started;
+- the task's **id and title** (`TASK 3 · README USAGE SECTION`);
+- a **chevron**, `▸` closed, `▾` open.
+
+**Click on a row:** it opens like an accordion and closes the others. An open row turns black with orange text and
+lists the task's steps from `plan.md` as plain text, `☑` for a done step and `☐` for an open one. The first open step
+is marked `◂ NOW`, whether or not an agent is working on it.
+
+**Click on the title in the arm:** shows the change's coordinator in the bottom field. The title is only clickable
+while a coordinator runs for the change.
+
+## The three columns
+
+Right of the elbow stand three square column headings: **WORKING** (blue), **NEEDS YOU** (red) and **DONE** (gold).
+Each task has at most one card, and that card sits on the task's own row, in the column of its state:
+
+| Task state | Column | Card | Click |
+| --- | --- | --- | --- |
+| working | WORKING | blue strip, the agent's tab and `STEP n/m`, a step bar | Shows the agent's terminal in the bottom field |
+| needs you | NEEDS YOU | red, blinking strip, the agent's tab and `NEEDS YOU` | Shows the agent's terminal, so you can answer there |
+| interrupted | WORKING | gray strip, `INTERRUPTED · NOBODY ON IT` | – |
+| done | DONE | gold strip, `DONE` | – |
+| not started | – | no card | – |
+
+A task counts as **interrupted** when it is the first open task after ticked ones and nothing runs for the whole
+change: no task agent, no coordinator, and no lead working on it. Work stopped there, and nobody picked it up.
+That is not an alarm (it is gray, not red), but it tells you where the coordinator would go on.
+
+Several cards in WORKING at once mean that the coordinator dispatched task agents in parallel: tasks whose
+`after` dependencies are all done can run side by side. In the demo change `add-greeting`, tasks 2 and 3 both come
+after task 1, so once task 1 is done they run at the same time (see [OpenSpec workflow](/docs/concepts/openspec-workflow)).
+
+The bottom field then shows the agent you clicked, under a rule that names it: `TASK 2 · IMPLEMENTER · LIVE`
+(blue, or red for a task that needs you). The round **◂ REPO** button at the right of the rule brings the
+[REPO tree](/docs/bridge/repo) back.
+
+## A read-only PLAN
+
+A change that has no worktree yet can still be shown in PLAN, read from the main checkout: OVERVIEW's **PLAN ▸**
+button does that. It shows the same rows and cards, but nothing on it opens a terminal, because there is no
+coordinator or agent to show.
+
+## Messages instead of a plan
+
+When there is nothing to draw, the elbow's arm says why:
+
+| Message | Means |
+| --- | --- |
+| `SCANNING …` | The first answer from `striker serve` has not come yet |
+| `NO PLAN FOR BRANCH <branch>` | The worktree's branch is not the `x-branch` of any change |
+| `NO TASKS IN PLAN` | The change's `tasks.md` has no task lines |
+| `NO REPO FOR THIS SPACE` | The space's folder is not a repo Striker knows |
+| `REPO UNREADABLE: …` / `STRIKER SERVE NOT RUNNING` | `striker serve` could not answer; the last good data stays |
+
+## OVERVIEW: the repo one level up
+
+OVERVIEW is PLAN for the whole repo instead of one change. The elbow and the three columns are the same; the rows
+are the repo's parts:
+
+![OVERVIEW of the demo repo alpha: the change add-greeting open, its coordinator working](/shots/overview.png)
+
+- **The arm** is taller and carries the repo's name, a briefing line (phase, next step, progress, the lead and how
+  old its report is, else the last commit) and the last commits.
+- **VISION · \<title\>** (black oval): opens to the vision's first paragraph and a round `<FILE> IN SPEC ▸` button
+  that shows the file in [SPEC](/docs/bridge/spec).
+- **One row per active change:** its oval, its name, `done/total`, `AFTER <change>` while it waits for another
+  change, `READY TO ARCHIVE` when every task is ticked and nobody is on it. Open, it lists the `proposal.md` and
+  `design.md` headings and the task lines with `☑`/`☐` and `◂ NOW`. Its round **PLAN ▸** button selects the
+  change's worktree space in PLAN, or shows PLAN read-only here when the change has no worktree.
+- **REGISTER:** the open items of the lead (its `needs_you` and its register), red while there are any.
+- **DONE:** the archived changes, newest first.
+- **CAPABILITIES:** the repo's living specs, as one line under the rows.
+
+A change row's card is its coordinator: WORKING with its task and a tick bar, NEEDS YOU with the coordinator's
+question, gray INTERRUPTED with the last ticked task, or gold READY TO ARCHIVE. A click on a coordinator's card
+shows its terminal in the bottom field.
+
+The colour of a change's oval, card and tree lane follows one rule:
+
+| Colour | When |
+| --- | --- |
+| Red, blinking | Its coordinator asks you |
+| Blue | Someone is on it now: its coordinator, one of its task agents, or the lead |
+| Gold | Every task ticked, not archived yet |
+| Gray | Interrupted (ticked and open tasks, nobody on it) or blocked by another change |
+| Outline only | Planned: nothing ticked, nobody on it |
+
+Blue never means "in progress" on its own: a change nobody works on right now is gold, gray or an outline.

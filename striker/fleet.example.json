@@ -1,0 +1,43 @@
+{
+  "repos": [
+    {
+      "name": "striker",
+      "path": "/home/you/striker",
+      "space": "striker"
+    },
+    {
+      "name": "alpha",
+      "machine": "remote1",
+      "path": "/srv/alpha",
+      "user": "awayteam",
+      "space": "alpha"
+    },
+    {
+      "name": "beta",
+      "machine": "remote1",
+      "path": "/srv/beta",
+      "user": "awayteam",
+      "space": "beta"
+    },
+    {
+      "name": "gamma",
+      "machine": "remote1",
+      "path": "/srv/gamma",
+      "user": "awayteam",
+      "space": "gamma"
+    },
+    {
+      "name": "delta",
+      "machine": "remote1",
+      "path": "/srv/delta",
+      "user": "awayteam",
+      "space": "delta"
+    }
+  ],
+  "status_dir": {
+    "remote1": "/var/lib/striker/status"
+  },
+  "agents_dir": {
+    "remote1": "/var/lib/striker/agents"
+  }
+}

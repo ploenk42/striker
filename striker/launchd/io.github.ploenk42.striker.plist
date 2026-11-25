@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: install.sh replaces @REPO@ and @HOME@ and writes the result to
+     ~/Library/LaunchAgents/io.github.ploenk42.striker.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.github.ploenk42.striker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@REPO@/striker/bin/striker</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@HOME@/.local/bin:/srv/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>STRIKER_HOME</key>
+    <string>@REPO@/striker</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>@HOME@/Library/Logs/striker.log</string>
+  <key>StandardErrorPath</key>
+  <string>@HOME@/Library/Logs/striker.log</string>
+</dict>
+</plist>

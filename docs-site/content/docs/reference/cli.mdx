@@ -1,0 +1,251 @@
+---
+title: striker CLI
+description: Every striker subcommand with its arguments, what it does and an example.
+---
+
+`striker` is one Go program. Run without arguments (or with arguments it does not understand) it prints its usage
+to stderr and exits with code 2:
+
+```text
+usage:
+  striker status
+  striker send <addr> <text>
+  striker send <addr> --file <file>
+  striker start-lead <repo>
+  striker start-coordinator <repo> <change>
+  striker serve [--addr 127.0.0.1:7522]
+  striker issues <change>
+  striker issues <plan file>
+  striker dispatch <role> <task id | #issue> --plan <change> [--dry-run]
+  striker dispatch <role> <issue> --plan <plan file> [--dry-run]
+  striker coordinator <plan file> [--terminal <addr>]
+  striker statusline   (Claude Code status line: JSON on stdin)
+  striker install-statusline
+```
+
+Every command that needs the fleet reads `fleet.json` from the Striker home (`STRIKER_HOME`, see
+[Files](/docs/reference/files)). Exit codes: `0` success, `1` an error (printed as `striker: <error>`), `2` wrong
+arguments or an agent that is not ready yet.
+
+Some messages striker prints are in German (for example `Zugestellt an …`, "delivered to …"), because the person's agents work in
+German; the commands themselves behave the same.
+
+## Current commands
+
+### striker status
+
+```text
+striker status
+```
+
+Prints the state of the whole fleet as JSON, without asking any agent: for every repo its fleet entry, its lead
+(terminal address, live state from hc, the lead's last status message) and the content of the lead's status file,
+plus the repo's coordinators (change, address, live state, status file). Leads that run on this computer but are
+not in `fleet.json` are found by their label `striker.lead`; coordinators by `striker.coordinator` and `striker.repo`.
+A missing or broken status file shows as `{"error": "…"}` inside the repo, never as a failure of the whole command.
+
+```text
+striker status
+```
+
+```json
+{
+  "updated": "2026-11-24T09:12:00Z",
+  "repos": [
+    {
+      "name": "alpha",
+      "machine": "remote1",
+      "path": "/srv/repos/alpha",
+      "space": "alpha",
+      "space_path": "/srv/repos/alpha",
+      "lead": { "address": "remote1/t2", "state": "idle", "msg": null, "status_ms": null, "where": "alpha / claude" },
+      "status": { "repo": "alpha", "phase": "implement", "task": "Add a greeting", "progress": { "done": 1, "total": 3 }, "needs_you": [], "note": "Coordinator running." },
+      "coordinators": [
+        { "change": "add-greeting", "address": "remote1/t5", "state": "working", "status": { "change": "add-greeting", "phase": "implement" } }
+      ]
+    }
+  ]
+}
+```
+
+### striker send
+
+```text
+striker send <addr> <text>
+striker send <addr> --file <file>
+```
+
+Sends a message to the terminal `<addr>` through hc. The text is prefixed with `[Striker] ` unless it already starts
+with it, and trailing whitespace is trimmed. Quotes reach the agent unchanged, which is why Striker uses this
+instead of `hc send`. Long texts go into a file and are sent with `--file`. The message waits in the agent's input
+if the agent is working; `striker send` never interrupts.
+
+```text
+striker send remote1/t2 "Antwort des Menschen: \"Yes, use Hello, world.\""
+striker send t3 --file C:\demo\answer.txt
+```
+
+("Antwort des Menschen" means "the human's answer".)
+
+### striker start-lead
+
+```text
+striker start-lead <repo>
+```
+
+Starts the lead of a repo listed in `fleet.json`: refuses if a terminal already carries `striker.lead=<repo>`,
+opens the repo's space (`space` from the fleet entry) on its machine with a tab `claude` running Claude Code in the
+repo, as the fleet entry's `user` when one is set (`sudo -u <user>`), labels the terminal `striker.lead=<repo>`, waits
+up to 90 s for Claude to be ready and sends the lead brief (`briefs/lead.md`) with its placeholders filled. If
+Claude is still working or blocked after the wait, it prints how to check the screen and exits with 2; the brief is
+then sent by hand.
+
+```text
+striker start-lead alpha
+```
+
+### striker start-coordinator
+
+```text
+striker start-coordinator <repo> <change>
+```
+
+Starts the coordinator of the OpenSpec change `<change>` of `<repo>`. The repo is looked up in `fleet.json`, else
+as a local lead (a terminal on this computer labelled `striker.lead=<repo>`). `<change>` must be kebab-case. The
+command:
+
+1. refuses if the change already has a coordinator for this repo;
+2. reads `x-branch` from `openspec/changes/<change>/.openspec.yaml` (default: the change name);
+3. uses the branch's worktree, or creates `<repo>-<change>` next to the repo (from the branch if it exists locally
+   or on `origin`, else as a new branch from the default branch);
+4. opens the space `<repo>-<change>` with the tab `coord <change>` running Claude Code in the worktree (as the
+   fleet `user`, if set);
+5. labels the terminal `striker.repo=<repo>` and `striker.coordinator=<change>`;
+6. sends `briefs/coordinator.md`, filled with repo, change and status file.
+
+The coordinator's status file is `<status_dir>/<repo>--<change>.json` on a remote machine and
+`~/.striker/status/<repo>--<change>.json` on this computer. `striker start-coordinator --help` prints a short summary.
+
+```text
+striker start-coordinator alpha add-greeting
+```
+
+A relayed lead (a repo with a `user`) cannot run this; it asks with a `start-coordinator` request in its status file
+and `striker serve` runs the same steps.
+
+### striker dispatch (OpenSpec change)
+
+```text
+striker dispatch <role> <task id | #issue> --plan <change> [--dry-run]
+```
+
+Run by a coordinator inside its worktree. Starts a task agent for one task of the change: a background hc terminal
+named `<role>-<task id>` in the worktree, running Claude Code with a first message that names the task, the paths of
+`tasks.md`, `plan.md`, `design.md` and `proposal.md`, the task's text and the shell rules. Labels: `striker.task=<task id>`,
+`striker.role=<role>`, `striker.topic=<change>` and `striker.repo=<repo>`. It prints the new terminal's address.
+
+- `<role>`: lowercase letters, digits and `-` (for example `implementer`, `spec-reviewer`, `quality-reviewer`).
+- The task is a task id from `tasks.md` (`2.3`), or an issue number (`#42`) for task lines that still carry one.
+- `--dry-run` prints the hc command line as JSON instead of running it.
+
+```text
+striker dispatch implementer 2 --plan add-greeting
+striker dispatch spec-reviewer 2 --plan add-greeting --dry-run
+```
+
+A relayed coordinator asks with a `dispatch` request instead (see [Status file](/docs/reference/status-file)).
+
+### striker serve
+
+```text
+striker serve [--addr 127.0.0.1:7522]
+```
+
+The long-running part of Striker, started by the installers at login. It serves, on a loopback address only (other
+hosts are refused, and requests whose `Host` header is not `127.0.0.1:<port>` or `localhost:<port>` get 403):
+
+- `/status`: the same report as `striker status`, rebuilt every 20 s;
+- `/crew`: the crew list for the LCARS sidebar (names, ranks, model, tokens);
+- `/repo`, `/space`, `/doc`, `/overview`: the data of the bridge views.
+
+It also runs the relay every 10 s: it reads the `requests` of the status files on machines with relayed repos,
+carries out each new id once, answers the requester and reports finished task agents back to their coordinator.
+What it did is kept in `~/.striker/relay.json`. If that file cannot be read, the relay stays off (so nothing runs
+twice) and the rest of serve keeps running.
+
+```text
+striker serve
+striker serve --addr 127.0.0.1:7600
+```
+
+### striker statusline
+
+```text
+striker statusline
+```
+
+Claude Code's status line command. Claude Code passes its status line JSON on stdin; striker prints a short line
+(`<model> · <tokens>`, for example `Opus · 812K`) and stores the JSON for the current herdr terminal
+(`HC_TERMINAL_ID`) in `~/.striker/agents/<terminal>.json`. Striker reads these files for the crew's model and token
+counts. It never fails loudly: bad input prints nothing and stores nothing.
+
+### striker install-statusline
+
+```text
+striker install-statusline
+```
+
+Sets `striker statusline` (with the absolute path of the running binary) as the status line in
+`~/.claude/settings.json`, only if no `statusLine` is set yet. The rest of the file is left as it is. The installers
+call it.
+
+## Legacy commands
+
+These belong to the time before OpenSpec, when plans were Markdown files under `docs/superpowers/plans` and tasks
+were GitHub issues. They still work for old plans; new work uses OpenSpec changes.
+
+### striker issues (legacy)
+
+```text
+striker issues <change>
+striker issues <plan file>
+```
+
+Creates a GitHub issue (with `gh`) for every task that has none yet and writes the numbers back: `(#<n>)` into the
+task lines of the change's `tasks.md`, or into the task headings of a plan file. It prints `#<n> <task>` per created
+issue. Run inside the repo's worktree; a plan file must lie inside it. Current OpenSpec work does not use issues:
+commits name their task (`Task <id>: …`).
+
+```text
+striker issues add-greeting
+```
+
+### striker dispatch with a plan file (legacy)
+
+```text
+striker dispatch <role> <issue> --plan <plan file> [--dry-run]
+```
+
+Starts a task agent for the plan task with GitHub issue `<issue>`: terminal `<role>-<issue>`, labels
+`striker.task=<issue>`, `striker.role=<role>` and `striker.topic=<plan topic>`. The first message names the plan and, if it
+exists, the matching spec (`docs/superpowers/specs/<plan>-design.md`). A plan without issue numbers is refused,
+except with `--dry-run`, where the number is taken as the task's position.
+
+```text
+striker dispatch implementer 12 --plan docs/superpowers/plans/2026-01-10-greeting.md --dry-run
+```
+
+### striker coordinator (legacy)
+
+```text
+striker coordinator <plan file> [--terminal <addr>]
+```
+
+Turns the current terminal (or `--terminal <addr>`) into the coordinator of an old plan: labels it
+`striker.repo=<repo>` and `striker.coordinator=<topic>`, writes a filled copy of the coordinator brief to
+`~/.striker/briefs/coordinator-<repo>--<topic>.md` and prints its path. Run inside the plan's worktree. Its status
+file is `~/.striker/status/<repo>--<topic>.json`.
+
+```text
+striker coordinator docs/superpowers/plans/2026-01-10-greeting.md
+```
