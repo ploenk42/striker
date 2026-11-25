@@ -7,13 +7,32 @@ Striker is a chain of Claude Code sessions, each with one job. Every session run
 Herdr terminal, and every terminal can carry labels (`hc label <addr> key=value`).
 Striker and the bridge find the sessions by those labels, not by their names or positions.
 
-| Role | Runs on | As user | Labels | Started by |
-| --- | --- | --- | --- | --- |
-| Human | this computer | the person | none | – |
-| Striker | this computer | the person | `striker.self` | the person, by hand |
-| Lead | the repo's machine | `user` from `fleet.json` | `striker.lead=<repo>` | `striker start-lead <repo>` |
-| Coordinator | the repo's machine, in the change's worktree | same as the lead | `striker.coordinator=<change>`, `striker.repo=<repo>` | `striker start-coordinator <repo> <change>` |
-| Task agent | the coordinator's worktree | same as the coordinator | `striker.task`, `striker.role`, `striker.topic`, `striker.repo` | `striker dispatch <role> <task> --plan <change>` |
+| Role | Rank | Runs on | As user | Labels | Started by |
+| --- | --- | --- | --- | --- | --- |
+| Human | Captain | this computer | the person | none | – |
+| Striker | Commander (`CDR`) | this computer | the person | `striker.self` | the person, by hand |
+| Lead | Lieutenant Commander (`LCDR`) | the repo's machine | `user` from `fleet.json` | `striker.lead=<repo>` | `striker start-lead <repo>` |
+| Coordinator | Lieutenant (`LT`) | the repo's machine, in the change's worktree | same as the lead | `striker.coordinator=<change>`, `striker.repo=<repo>` | `striker start-coordinator <repo> <change>` |
+| Task agent | Lieutenant Junior Grade (`LTJG`) for reviewers, Ensign (`ENS`) for the rest | the coordinator's worktree | same as the coordinator | `striker.task`, `striker.role`, `striker.topic`, `striker.repo` | `striker dispatch <role> <task> --plan <change>` |
+
+## Chain of command
+
+The roles follow the officer ranks of the US Navy, from the top down:
+
+| Rank | Abbreviation | Who |
+| --- | --- | --- |
+| Captain of the Enterprise | – | the Human: owns the fleet and decides |
+| Commander | `CDR` | Striker: the control room, the person's first officer |
+| Lieutenant Commander | `LCDR` | a lead: one per repo |
+| Lieutenant | `LT` | a coordinator: one per OpenSpec change |
+| Lieutenant Junior Grade | `LTJG` | a reviewer task agent (`spec-reviewer`, `quality-reviewer`) |
+| Ensign | `ENS` | any other task agent, such as an `implementer` |
+
+The bridge shows every agent with its rank and a crew name, without dots (`CDR STRIKER`, `LCDR PATA`,
+`LT CRUSHA`). Leads and coordinators take names from the bridge pool, task agents from the lower-decks pool;
+when both pools are used up, an agent becomes `CREWMAN <n>`. An agent without a Striker role (a Claude session
+nobody labelled) gets its rank from its model instead: Fable `LCDR`, Opus `LT`, Sonnet `LTJG`, Haiku `ENS`,
+anything else `CREW`. The Captain has no terminal and so never appears in the crew list.
 
 ## Human
 
